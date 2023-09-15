@@ -18,25 +18,29 @@ from gym_trade.tool.common import get_csv_dir
 class US_Stock_Env(gym.Env):
     def __init__(self, csv_root_dir, 
                     init_balance=100,
-                    commission_rate = 3e-4, 
-                    reward_type='pnl',
-                    obs_keys=["stat_position_ratio"],
-                    stat_keys=['stat_balance', 'stat_profit_ratio', 'stat_pnl'],
+                    commission_type = "futu", 
+                    reward_type='pnl_delta_dense',
+                    obs_keys=["stat_posRate"],
+                    stat_keys=['stat_pos', 'stat_posRate', 'stat_pnl','stat_balance','stat_cash',],
+                    action_min_thres=0.1,
                     verbose=0,
+                    seed=0,
                     **kwargs,
                     ):
         self._csv_root_dir = csv_root_dir
         self._init_balance = init_balance
-        self._commision_rate = commission_rate
+        self._commission_type = commission_type
         self._reward_type = reward_type
         self._obs_keys = obs_keys
         self._stat_keys = stat_keys
         self._set_clock_func = lambda date, hour, minute: date.replace(hour=hour, minute=minute)
         self._verbose = verbose
+        self._action_min_thres = action_min_thres
         
-        self. _update_csv_dir(self, self._csv_root_dir)
+        self. _update_csv_dir(self._csv_root_dir)
 
-        self._seed = 0
+        self._seed = seed
+        self.seed = seed
         self._init_var()
 
     def reset(self):
@@ -53,12 +57,22 @@ class US_Stock_Env(gym.Env):
         self._update_stats(action) 
 
         #======= outputs========
-        info = self._get_info()
+        info = {}
         obs = self._get_obs()
-        done = len(info['done']) !=0
-        reward = {} 
+        done = self._fsm()
+        reward = self._get_reward() 
 
         return obs, reward, done, info
+
+    def _get_reward(self):
+        if self._reward_type == "pnl_delta_dense":
+            pnl_delta = self._df['stat_pnl'].iloc[self._timestep]-self._df['stat_pnl'].iloc[self._timestep-1]
+            return pnl_delta
+        else:
+            raise NotImplementedError
+    def _fsm(self):
+        done = self.timestep >= (len(self._df.index)-1) 
+        return done
 
     def _update_csv_dir(self, dir):
         if isinstance(dir, str): # extract csv file path
@@ -91,11 +105,10 @@ class US_Stock_Env(gym.Env):
         self._df["action"] = np.nan
         
         self._df['stat_balance'].iloc[self._timestep] = self._init_balance
-        self._df['stat_profit_ratio'].iloc[self._timestep] = 0
+        self._df['stat_cash'].iloc[self._timestep] = self._init_balance
+        self._df['stat_pos'].iloc[self._timestep] = 0
+        self._df['stat_posRate'].iloc[self._timestep] = 0
         self._df['stat_pnl'].iloc[self._timestep] = 0
-    
-
-
 
     def _get_obs(self):
         obs = {}
@@ -103,42 +116,51 @@ class US_Stock_Env(gym.Env):
             obs[k] = self._df.iloc[self._timestep][k]
         return obs
     
+    def _get_commision(self, pos):
+        if self._commission_type == "futu":
+            min_commision = 0.99
+            commision = 0.0049
+            platform = 0.005
+            min_platform = 1
+            return np.clip(pos*commision,min_commision,None) + np.clip(pos*platform,min_platform,None) 
+        else:
+            raise NotImplementedError
+    
 
     def _update_stats(self, action):
         self._df['action'].iloc[self._timestep-1] = action 
-        close = self._df['close'].iloc[self._timestep]
+        _close = self._df['close'].iloc[self._timestep]
+        _open = self._df['open'].iloc[self._timestep]
+        _cash_prv = self._df['stat_cash'].iloc[self._timestep-1]
+        _pos_prv = self._df['stat_pos'].iloc[self._timestep-1]
+        
 
-        action_prv = 0 if self.timestep == 1 else self._df['stat_action'].iloc[self._timestep-1]
-        sell_price = self._df['open'].iloc[self._timestep]
-        profit_ratio = (sell_price - self.buy_price) / self.buy_price 
-        balance =  self._buy_pos*(profit_ratio-2*self._commision_rate) + self.buy_balance
+        if action>=self._action_min_thres:
+            _buy_price = _open
+            _buy_cash = _cash_prv * action 
+            _buy_pos = _buy_cash // _open
+            _buy_cash = _buy_pos * _open
+            self._df['stat_cash'].iloc[self._timestep] = _cash_prv - _buy_cash - self._get_commision(_buy_pos)
+            self._df['stat_pos'].iloc[self._timestep] = _pos_prv + _buy_pos 
+        elif action<=-self._action_min_thres:
+            _sell_price = _open
+            _sell_pos = np.floor(_pos_prv * np.abs(action))
+            _sell_cash = _sell_pos * _sell_price
+            self._df['stat_cash'].iloc[self._timestep] = _cash_prv + _sell_cash - self._get_commision(_sell_pos) 
+            self._df['stat_pos'].iloc[self._timestep] = _pos_prv - _sell_pos
+        else:
+            self._df['stat_cash'].iloc[self._timestep] = _cash_prv
+            self._df['stat_pos'].iloc[self._timestep] = _pos_prv
 
+        self._df['stat_balance'].iloc[self._timestep] = self._df['stat_pos'].iloc[self._timestep] * _close  + \
+                                                        self._df['stat_cash'].iloc[self._timestep]
 
-
-        # if is_hold_prv and (not is_hold): #sell
-        #     sell_price = self._df['open'].iloc[self._timestep]
-        #     profit_ratio = (sell_price - self.buy_price) / self.buy_price 
-        #     balance =  self._buy_pos*(profit_ratio-2*self._commision_rate) + self.buy_balance
-        # elif is_hold_prv and is_hold:# hold
-        #     self.buy_init_balance = self._df['stat_balance'].iloc[self._timestep]
-        #     profit_ratio = (close - self.buy_price) / self.buy_price
-        #     balance =  self._buy_pos*(profit_ratio-self._commision_rate) + self.buy_balance
-        # elif (not is_hold_prv) and is_hold: # buy
-        #     self.buy_price = self._df['open'].iloc[self._timestep]
-        #     self.buy_balance = balance_prv
-        #     profit_ratio = (close - self.buy_price) / self.buy_price
-        #     balance =  self._buy_pos*(profit_ratio-self._commision_rate) + self.buy_balance
-        # else: # not holding 
-        #     self.buy_price = None
-        #     self.buy_balance = None
-        #     profit_ratio =0 
-        #     balance = balance_prv
-
-        # print(commission_rate)
-        self._df['stat_profit_ratio'].iloc[self._timestep] =  profit_ratio
-        self._df['stat_balance'].iloc[self._timestep] = balance
-        self._df['stat_pnl'].iloc[self._timestep] =  profit_ratio * self._buy_pos
-
+        self._df['stat_pnl'].iloc[self._timestep] = (self._df['stat_balance'].iloc[self._timestep] - self._init_balance)\
+                                                                 / self._init_balance 
+        self._df['stat_posRate'].iloc[self._timestep] = (self._df['stat_balance'].iloc[self._timestep] - self._df['stat_cash'].iloc[self._timestep])\
+                                                             / self._df['stat_balance'].iloc[self._timestep]
+    def render(self):
+        raise NotImplementedError
         
     @property
     def df(self):
@@ -150,7 +172,7 @@ class US_Stock_Env(gym.Env):
 
     @property
     def action_space(self):
-        return gym.spaces.Box(low=-1, high=1, shape=(1,)) # delta action, 0~1 buy, -1~0 sell, 0 hold
+        return gym.spaces.Box(low=-1, high=1, shape=(1,)) # delta action, thres~1: buy, -1~-thres: sell, -thres~thres: hold
 
     @property
     def observation_space(self):
