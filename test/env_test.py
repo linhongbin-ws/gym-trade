@@ -10,10 +10,12 @@ parser.add_argument('-p',type=int)
 args = parser.parse_args()
 
 if args.p ==1:
-    from gym_trade.env import US_Stock_Env
+    from gym_trade.env import *
     env = US_Stock_Env(csv_root_dir=str(Path(".") / "gym_trade" / "data" / "example"))
-    env.reset()
-
+    env = LightChart_Visualizer(env)
+    env = Keyboard(env)
+    obs = env.reset()
+    env.render()
     done = False
     while not done:
         action = env.action_space.sample()
@@ -21,5 +23,8 @@ if args.p ==1:
         print("=====timestep: {}====".format(env.timestep))
         print_obs = [k+":"+ str(v) for k,v in obs.items()]
         print("OBS: ", "| ".join(print_obs), "ACTION:", action, "Reward:",reward)
-    # env.render()
+        env.render()
+        if info["keyboard"] == 'q':
+            break
+    env.close()
 

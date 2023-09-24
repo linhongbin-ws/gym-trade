@@ -191,4 +191,8 @@ class US_Stock_Env(gym.Env):
     @seed.setter
     def seed(self, seed):
         self._seed = seed
-        self._rng_csv_idx = np.random.RandomState(seed) 
+        self._rng_csv_idx = np.random.RandomState(seed)
+
+    @property
+    def timestep(self):
+        return self._timestep 

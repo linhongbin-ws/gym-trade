@@ -1,10 +1,10 @@
 from setuptools import setup, find_packages
 
-setup(name='gym_ras', 
+setup(name='gym_trade', 
       version='1.0',
     install_requires=[
         'gym<=0.23.1', 
-        'opencv-python==4.2.0.34',
+        # 'opencv-python==4.2.0.34',
         'ruamel.yaml',
         'pandas',
         'numpy',
@@ -12,5 +12,6 @@ setup(name='gym_ras',
         'mplfinance',
         'tqdm',
         'pandas_ta',
+        'lightweight-charts',
         ], 
       packages=find_packages())

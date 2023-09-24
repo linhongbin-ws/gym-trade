@@ -8,7 +8,7 @@ matplotlib.use('TKAgg')
 import mplfinance as mpf
 pd.options.mode.chained_assignment = None  # disable warning for pandas
 
-class Visualizer(BaseWrapper):
+class Mfinance_Visualizer(BaseWrapper):
     def __init__(self, 
                     env, 
                     **kwargs,
