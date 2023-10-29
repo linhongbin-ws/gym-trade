@@ -1,0 +1,76 @@
+default:
+  seed: 0
+  wrapper:
+    pipeline: ["ImageNoise", "DSA", "VirtualClutch", "ActionNoise", "DiscreteAction", "TimeLimit", "FSM", "OBS"]
+    DSA: {zoom_box_obj: psm1, encode_type: general_simple2, cv_interpolate: area, zoom_box_fix_length_ratio: 0.5, encoding_id_needle: 60, encoding_id_psm1: 130, encoding_id_zoom_box: 30, zoom_movement_type: continuous}
+    VirtualClutch: {start: 6}
+    ActionNoise: {noise_scale: 0.0}
+    DiscreteAction: {action_scale: 0.2}
+    TimeLimit: {max_timestep: 200}
+    FSM: {arg: 0}
+    OBS: {image_obs_key: ["dsa"], vector_obs_key: ["gripper_state", "fsm_state", "robot_prio"], direct_map_key: ["fsm_state"], direct_render_key: ["rgb", "depth"], is_vector2image: true, image_resize: [64,64]}
+    ImageNoise: {"None": "None"}
+  client: 
+    name: SurrolEnv
+    SurrolEnv: 
+      pybullet_gui: false
+      cam_width: 600
+      cam_height: 600
+      mask_background_id: -3
+      depth_remap_range: 0.2
+      depth_remap_range_noise: 0.0
+      depth_remap_center_noise: 0.0
+      cam_target_noise: 0.0
+      cam_distance_noise: 0.0
+      cam_yaw_noise: 0.0
+      cam_pitch_noise: 0.0
+      cam_roll_noise: 0.0
+      cam_up_axis_noise: 0.0
+      background_texture_dir: ""
+
+    task: needle_pick
+    needle_pick:
+      fix_goal: true
+      noise_scale: 1.0
+      reward_done_success: 1
+      reward_done_fail: -0.1
+      reward_in_progress: -0.001
+      reward_progress_fail: -0.01
+      done_z_thres: 0.1
+      init_pose_ratio_low_gripper: [-0.5,-0.5,-0.5,-0.9]
+      init_pose_ratio_high_gripper: [0.5,0.5,0.5,0.9]
+      init_pose_ratio_low_needle: [-0.5,-0.5,0.1,-0.99]
+      init_pose_ratio_high_needle: [0.5,0.5,0.5,0.99]
+    gauze_retrieve:
+      fix_goal: true
+      noise_scale: 1.0
+      reward_done_success: 1
+      reward_done_fail: -0.1
+      reward_in_progress: -0.001
+      reward_progress_fail: -0.01
+      done_z_thres: 0.1
+      init_pose_ratio_low_gripper: [-0.5,-0.5,-0.5,-0.9]
+      init_pose_ratio_high_gripper: [0.5,0.5,0.5,0.9]
+      init_pose_ratio_low_stuff: [-0.5,-0.5,0.1,-0.99]
+      init_pose_ratio_high_stuff: [0.5,0.5,0.5,0.99]
+    peg_transfer:
+      fix_goal: true
+      noise_scale: 1.0
+      reward_done_success: 1
+      reward_done_fail: -0.1
+      reward_in_progress: -0.001
+      reward_progress_fail: -0.01
+      done_z_thres: 0.1
+      init_pose_ratio_low_gripper: [-0.5,-0.5,-0.5,-0.9]
+      init_pose_ratio_high_gripper: [0.5,0.5,0.5,0.9]
+      init_pose_ratio_low_stuff: [-0.5,-0.5,0.1,-0.99]
+      init_pose_ratio_high_stuff: [0.5,0.5,0.5,0.99]
+
+
+
+
+
+
+
+
+

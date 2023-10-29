@@ -37,6 +37,6 @@ class LightChart_Visualizer(BaseWrapper):
 
         self._chart.show(block=False)
 
-    def close(self):
+    def __del__(self):
         self._chart.exit()
 

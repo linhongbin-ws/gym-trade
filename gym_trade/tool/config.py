@@ -1,7 +1,11 @@
 import json
-import pathlib
 import re
+import ruamel.yaml as yaml
+import pathlib
 
+def load_yaml(path):
+    config = yaml.safe_load((pathlib.Path(path)).read_text())
+    return config
 
 class Config(dict):
 
