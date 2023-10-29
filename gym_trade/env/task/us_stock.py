@@ -109,6 +109,8 @@ class US_Stock_Env(gym.Env):
         self._df['stat_pos'].iloc[self._timestep] = 0
         self._df['stat_posRate'].iloc[self._timestep] = 0
         self._df['stat_pnl'].iloc[self._timestep] = 0
+    
+
 
     def _get_obs(self):
         obs = {}
@@ -196,3 +198,10 @@ class US_Stock_Env(gym.Env):
     @property
     def timestep(self):
         return self._timestep 
+
+    @property
+    def stat_keys(self):
+        return self._stat_keys
+    @property
+    def obs_keys(self):
+        return self._obs_keys
