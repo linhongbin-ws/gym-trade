@@ -5,8 +5,7 @@ import numpy as np
 from os.path import isfile
 import random
 from typing import List, Union
-
-
+import pathlib
 
 
 #=== gym_datatrade package
@@ -16,31 +15,28 @@ from gym_trade.tool.common import get_csv_dir
 
 
 class US_Stock_Env(gym.Env):
-    def __init__(self, csv_root_dir, 
+    def __init__(self, 
+                    csv_root_dir='', 
                     init_balance=100,
                     commission_type = "futu", 
                     reward_type='pnl_delta_dense',
                     obs_keys=["stat_posRate"],
                     stat_keys=['stat_pos', 'stat_posRate', 'stat_pnl','stat_balance','stat_cash',],
                     action_min_thres=0.1,
-                    verbose=0,
-                    seed=0,
                     **kwargs,
                     ):
-        self._csv_root_dir = csv_root_dir
+        self._csv_root_dir = str(pathlib.Path( __file__ ).absolute().parent.parent.parent / "asset" / "mini_minute_data")  if csv_root_dir=='' else  csv_root_dir
         self._init_balance = init_balance
         self._commission_type = commission_type
         self._reward_type = reward_type
         self._obs_keys = obs_keys
         self._stat_keys = stat_keys
         self._set_clock_func = lambda date, hour, minute: date.replace(hour=hour, minute=minute)
-        self._verbose = verbose
         self._action_min_thres = action_min_thres
         
         self. _update_csv_dir(self._csv_root_dir)
 
-        self._seed = seed
-        self.seed = seed
+        self._seed = 0
         self._init_var()
 
     def reset(self):

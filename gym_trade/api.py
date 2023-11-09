@@ -13,14 +13,8 @@ def make_env(env_config=None, tags=[], seed=0):
     # print(train_config)
     for tag in tags:
         config = config.update(yaml_dict[tag])
-    if config.client.name == "SurrolEnv":
-        from gym_ras.env.embodied.surrol import SurrolEnv
-        _call = SurrolEnv
-    elif config.client.name == "dVRKEnv":
-        _call = getattr(gym_ras.env.embodied.dvrk, config.client.name)
-    else:
-        raise NotImplementedError
-    # print(config)
+    
+    _call__ = getattr(gym_trade.env.embodied, config.client.name)
     _kwargs =getattr(config.client, config.client.name).flat
     task_config = getattr(config.client, config.client.task)
     _kwargs.update(task_config.flat)
