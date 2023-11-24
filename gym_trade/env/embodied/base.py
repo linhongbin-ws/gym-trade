@@ -33,28 +33,33 @@ class BaseEnv(ABC):
     def get_oracle_action(self,obs):
         return self.client.get_oracle_action(obs)
 
-    @abstractmethod
+
     @property
+    @abstractmethod
     def action_space(self):
         return self.client.action_space
 
-    @abstractmethod
+    
     @property
+    @abstractmethod
     def observation_space(self):
         return self.client.observation_space
 
-    @abstractmethod
+    
     @property
+    @abstractmethod
     def seed(self):
         return self.client.seed
 
-    @abstractmethod
+    
     @property
+    @abstractmethod
     def timestep(self):
         return self.client.timestep
 
-    @abstractmethod
+    
     @seed.setter
+    @abstractmethod
     def seed(self, seed):
         self.client.seed = seed
 

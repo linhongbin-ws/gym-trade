@@ -1,4 +1,4 @@
-from gym_ras.env.wrapper.base import BaseWrapper
+from gym_trade.env.wrapper.base import BaseWrapper
 import numpy as np
 import gym
 class DiscreteAction(BaseWrapper):

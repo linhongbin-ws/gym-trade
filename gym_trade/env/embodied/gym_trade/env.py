@@ -6,7 +6,7 @@ class GymTradeEnv(BaseEnv):
                     **kwargs,
                     ):
         if task=="us_stock":
-            from gym_trade.env.embodied.gym_ras_sim.us_stock import US_Stock_Env
+            from gym_trade.env.embodied.gym_trade.us_stock import US_Stock_Env
             client = US_Stock_Env(**kwargs)
         else:
             raise NotImplementedError
@@ -34,12 +34,10 @@ class GymTradeEnv(BaseEnv):
     def observation_space(self):
         return self.client.observation_space
 
-    @abstractmethod
     @property
     def seed(self):
         return self.client.seed
 
-    @abstractmethod
     @property
     def timestep(self):
         return self.client.timestep
@@ -47,3 +45,7 @@ class GymTradeEnv(BaseEnv):
     @seed.setter
     def seed(self, seed):
         self.client.seed = seed
+    
+    @property
+    def df(self,):
+        return self.client._df

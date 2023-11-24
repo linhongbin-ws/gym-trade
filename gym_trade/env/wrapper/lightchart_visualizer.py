@@ -26,7 +26,7 @@ class LightChart_Visualizer(BaseWrapper):
 
         
     def render(self,):
-        _df = self.unwrapped._df
+        _df = self.unwrapped.df
         self._chart.set(_df.iloc[:self.unwrapped.timestep+1])
         for k,v in self._sub_charts.items():
             _data = _df[[k]].iloc[:self.unwrapped.timestep+1]

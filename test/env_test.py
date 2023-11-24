@@ -10,8 +10,9 @@ parser.add_argument('-p',type=int)
 args = parser.parse_args()
 
 if args.p ==1:
-    from gym_trade.env import *
-    env = US_Stock_Env(csv_root_dir=str(Path(".") / "gym_trade" / "data" / "example"))
+    from gym_trade.env.embodied import *
+    from gym_trade.env.wrapper import *
+    env = GymTradeEnv(task='us_stock', csv_root_dir=str(Path(".") / "gym_trade" / "asset" / "mini_minute_data"))
     env = LightChart_Visualizer(env)
     env = Keyboard(env)
     obs = env.reset()

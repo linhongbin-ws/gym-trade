@@ -13,5 +13,8 @@ setup(name='gym_trade',
         'tqdm',
         'pandas_ta',
         'lightweight-charts',
+        'pynput',
+        'PyGObject',
+        'pywebview[qt]',
         ], 
       packages=find_packages())

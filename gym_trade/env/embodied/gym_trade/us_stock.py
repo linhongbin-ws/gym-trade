@@ -35,8 +35,9 @@ class US_Stock_Env(gym.Env):
         self._action_min_thres = action_min_thres
         
         self. _update_csv_dir(self._csv_root_dir)
-
+        
         self._seed = 0
+        self.seed = 0
         self._init_var()
 
     def reset(self):
@@ -73,11 +74,11 @@ class US_Stock_Env(gym.Env):
     def _update_csv_dir(self, dir):
         if isinstance(dir, str): # extract csv file path
             self._csv_list = get_csv_dir(dir)
-        elif isinstance(csv_dir, list):
-            self._csv_list = csv_dir
+        # elif isinstance(csv_dir, list):
+        #     self._csv_list = csv_dir
         else:
             raise NotImplementedError
-        assert len(self._csv_list)!=0, f"data_dir: {data_dir} got empty csv data files"
+        assert len(self._csv_list)!=0, f"data_dir: {dir} got empty csv data files"
 
     def _init_var(self):
         self._csv_idx = self._rng_csv_idx.randint(0, len(self._csv_list)-1)
