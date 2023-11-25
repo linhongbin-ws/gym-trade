@@ -1,24 +1,16 @@
 default:
   seed: 0
   wrapper:
-    pipeline: [ "FSM", "OBS"]
-    DSA: {zoom_box_obj: psm1, encode_type: general_simple2, cv_interpolate: area, zoom_box_fix_length_ratio: 0.5, encoding_id_needle: 60, encoding_id_psm1: 130, encoding_id_zoom_box: 30, zoom_movement_type: continuous}
-  embodied: 
-    name: GymTradeEnv
-    GymTradeEnv: 
-      task: us_stock
-    us_stock:
-      csv_root_dir: '' 
-      init_balance: 100
-      commission_type: "futu",
-      reward_type: 'pnl_delta_dense'
-      obs_keys: ["stat_posRate"]
-      stat_keys: ['stat_pos', 'stat_posRate', 'stat_pnl','stat_balance','stat_cash',]
-      action_min_thres: 0.1
-
-
-
-
-
-
-
+    pipeline: [none]
+  embodied_name: GymTradeEnv
+  task_name: us_stock
+  embodied:
+    GymTradeEnv:
+      us_stock:
+        csv_root_dir: ''
+        init_balance: 100
+        commission_type: "futu"
+        reward_type: "pnl_delta_dense"
+        obs_keys: ["stat_posRate"]
+        stat_keys: ["stat_pos", "stat_posRate", "stat_pnl", "stat_balance", "stat_cash"]
+        action_min_thres: 0.1

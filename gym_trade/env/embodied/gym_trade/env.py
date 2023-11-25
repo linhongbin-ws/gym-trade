@@ -21,7 +21,7 @@ class GymTradeEnv(BaseEnv):
 
 
     def render(self, **kwargs):
-        return self.client.render(mode=mode)
+        return self.client.render()
     
     def get_oracle_action(self,obs):
         return self.client.get_oracle_action(obs)

@@ -5,7 +5,7 @@ setup(name='gym_trade',
     install_requires=[
         'gym<=0.23.1', 
         # 'opencv-python==4.2.0.34',
-        'ruamel.yaml',
+        'ruamel.yaml<=0.17',
         'pandas',
         'numpy',
         'matplotlib',

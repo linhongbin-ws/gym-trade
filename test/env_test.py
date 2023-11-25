@@ -8,41 +8,24 @@ parser = argparse.ArgumentParser(
 
 parser.add_argument('-p',type=int)
 args = parser.parse_args()
+/home/ben/code/trade/gym-trade/gym_trade/asset/mini_minute_data/
 
-if args.p ==1:
-    from gym_trade.env.embodied import *
-    from gym_trade.env.wrapper import *
-    env = GymTradeEnv(task='us_stock', csv_root_dir=str(Path(".") / "gym_trade" / "asset" / "mini_minute_data"))
-    env = LightChart_Visualizer(env)
-    env = Keyboard(env)
-    obs = env.reset()
+from gym_trade.env.embodied import *
+from gym_trade.env.wrapper import *
+env = GymTradeEnv(task='us_stock', csv_root_dir=str(Path(".") / "gym_trade" / "asset" / "mini_minute_data"))
+env = LightChart_Visualizer(env)
+# env = Keyboard(env)
+obs = env.reset()
+env.render()
+done = False
+while not done:
+    action = env.action_space.sample()
+    obs, reward, done, info = env.step(action)
+    print("=====timestep: {}====".format(env.timestep))
+    print_obs = [k+":"+ str(v) for k,v in obs.items()]
+    print("OBS: ", "| ".join(print_obs), "ACTION:", action, "Reward:",reward)
     env.render()
-    done = False
-    while not done:
-        action = env.action_space.sample()
-        obs, reward, done, info = env.step(action)
-        print("=====timestep: {}====".format(env.timestep))
-        print_obs = [k+":"+ str(v) for k,v in obs.items()]
-        print("OBS: ", "| ".join(print_obs), "ACTION:", action, "Reward:",reward)
-        env.render()
-        if info["keyboard"] == 'q':
-            break
+    if info["keyboard"] == 'q':
+        break
 
-elif args.p ==2:
-    from gym_trade.env import *
-    env = US_Stock_Env(csv_root_dir=str(Path(".") / "gym_trade" / "data" / "example"))
-    env = LightChart_Visualizer(env)
-    env = Keyboard(env)
-    obs = env.reset()
-    env.render()
-    done = False
-    while not done:
-        action = env.action_space.sample()
-        obs, reward, done, info = env.step(action)
-        print("=====timestep: {}====".format(env.timestep))
-        print_obs = [k+":"+ str(v) for k,v in obs.items()]
-        print("OBS: ", "| ".join(print_obs), "ACTION:", action, "Reward:",reward)
-        env.render()
-        if info["keyboard"] == 'q':
-            break
 

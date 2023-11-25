@@ -1,6 +1,7 @@
 from gym_trade.env.wrapper.base import BaseWrapper  
 from lightweight_charts import Chart
 import pandas as pd
+from gym_trade.tool.keyboard import Keyboard
 class LightChart_Visualizer(BaseWrapper):
     def __init__(self, 
                     env, 
@@ -10,6 +11,7 @@ class LightChart_Visualizer(BaseWrapper):
         super().__init__(env)
         self._subchart_keys = subchart_keys
         self._init_chart()
+        self._keyboard = Keyboard()
 
     def _init_chart(self):
         main_chart_width = 0.6
@@ -25,7 +27,7 @@ class LightChart_Visualizer(BaseWrapper):
 
 
         
-    def render(self,):
+    def gui_show(self,):
         _df = self.unwrapped.df
         self._chart.set(_df.iloc[:self.unwrapped.timestep+1])
         for k,v in self._sub_charts.items():
@@ -36,6 +38,8 @@ class LightChart_Visualizer(BaseWrapper):
             v[1].set(_data)
 
         self._chart.show(block=False)
+        char = self._keyboard.get_char()
+        return char
 
     def __del__(self):
         self._chart.exit()

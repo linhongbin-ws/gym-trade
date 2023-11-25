@@ -25,7 +25,7 @@ class US_Stock_Env(gym.Env):
                     action_min_thres=0.1,
                     **kwargs,
                     ):
-        self._csv_root_dir = str(pathlib.Path( __file__ ).absolute().parent.parent.parent / "asset" / "mini_minute_data")  if csv_root_dir=='' else  csv_root_dir
+        self._csv_root_dir = str(pathlib.Path( __file__ ).absolute().parent.parent.parent.parent / "asset" / "mini_minute_data")  if csv_root_dir=='' else  csv_root_dir
         self._init_balance = init_balance
         self._commission_type = commission_type
         self._reward_type = reward_type

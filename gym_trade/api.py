@@ -1,6 +1,6 @@
 from gym_trade.tool.config import Config, load_yaml
 from pathlib import Path
-
+from gym_trade.env import wrapper as wp
 def make_env(env_config=None, tags=[], seed=0):
     assert isinstance(tags, list)
     if env_config is None:
@@ -13,17 +13,25 @@ def make_env(env_config=None, tags=[], seed=0):
     # print(train_config)
     for tag in tags:
         config = config.update(yaml_dict[tag])
-    
-    _call__ = getattr(gym_trade.env.embodied, config.client.name)
-    _kwargs =getattr(config.client, config.client.name).flat
-    task_config = getattr(config.client, config.client.task)
-    _kwargs.update(task_config.flat)
-    _kwargs.update({"task": config.client.task})
+    if config.embodied_name == "GymTradeEnv":
+        from gym_trade.env.embodied.gym_trade import GymTradeEnv
+        _call = GymTradeEnv
+    else:
+        raise NotImplementedError
+    # print(config)
+    embodied_args = getattr(config.embodied, config.embodied_name)
+    _kwargs ={}
+    _kwargs["task"] = config.task_name
+    task_name = config.task_name
+    _kwargs.update(getattr(embodied_args, task_name).flat)
+    for k,v in embodied_args.flat.items():
+        if k.find(task_name)<0:
+            _kwargs.update({k: v})
     env = _call(**_kwargs)
 
     for wrapper in config.wrapper.pipeline:
-        if hasattr(gym_ras.env.wrapper, wrapper):
-            _call = getattr(gym_ras.env.wrapper, wrapper)
+        if hasattr(wp, wrapper):
+            _call = getattr(wp, wrapper)
             _kwargs =getattr(config.wrapper, wrapper).flat
             env = _call(env, **_kwargs)
     env.seed = seed
