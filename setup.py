@@ -16,5 +16,6 @@ setup(name='gym_trade',
         'pynput',
         'PyGObject',
         'pywebview[qt]',
+        'opencv-python-headless', # dont use opencv-python, https://forum.qt.io/topic/119109/using-pyqt5-with-opencv-python-cv2-causes-error-could-not-load-qt-platform-plugin-xcb-even-though-it-was-found/8
         ], 
       packages=find_packages())

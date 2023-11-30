@@ -23,6 +23,7 @@ class US_Stock_Env(gym.Env):
                     obs_keys=["stat_posRate"],
                     stat_keys=['stat_pos', 'stat_posRate', 'stat_pnl','stat_balance','stat_cash',],
                     action_min_thres=0.1,
+                    fix_buy_position=True,
                     **kwargs,
                     ):
         self._csv_root_dir = str(pathlib.Path( __file__ ).absolute().parent.parent.parent.parent / "asset" / "mini_minute_data")  if csv_root_dir=='' else  csv_root_dir
@@ -33,7 +34,8 @@ class US_Stock_Env(gym.Env):
         self._stat_keys = stat_keys
         self._set_clock_func = lambda date, hour, minute: date.replace(hour=hour, minute=minute)
         self._action_min_thres = action_min_thres
-        
+        self._fix_buy_position = fix_buy_position
+
         self. _update_csv_dir(self._csv_root_dir)
         
         self._seed = 0
@@ -134,8 +136,8 @@ class US_Stock_Env(gym.Env):
         _pos_prv = self._df['stat_pos'].iloc[self._timestep-1]
         
 
-        if action>=self._action_min_thres:
-            _buy_price = _open
+        if action>=self._action_min_thres: # buy
+
             _buy_cash = _cash_prv * action 
             _buy_pos = _buy_cash // _open
             _buy_cash = _buy_pos * _open

@@ -8,10 +8,10 @@
             "name": "Python: Current File",
             "type": "python",
             "request": "launch",
-            "program": "./test/env_test.py",
+            "program": "./gym_trade/run/env_play.py",
             "console": "integratedTerminal",
             "justMyCode": true,
-            "args": ["-p", "1"]
+            "args": ["--action","oracle"]
         }
     ]
 }

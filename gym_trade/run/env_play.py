@@ -1,5 +1,5 @@
 from gym_trade.api import make_env
-from gym_trade.env.wrapper import LightChart_Visualizer
+from gym_trade.env.wrapper import LightChart_Visualizer, ActionOracle
 import argparse
 from tqdm import tqdm
 import time
@@ -10,12 +10,13 @@ parser = argparse.ArgumentParser(
 
 parser.add_argument('-p',type=int)
 parser.add_argument('--repeat',type=int, default=1)
-parser.add_argument('--action',type=str, default="random")
+parser.add_argument('--action',type=str, default="oracle")
 parser.add_argument('--yaml-dir', type=str, default="./gym_trade/config/gym_trade.yaml")
 parser.add_argument('--yaml-tag', type=str, nargs='+', default=[])
 parser.add_argument('--env-tag', type=str, nargs='+', default=[])
 parser.add_argument('--seed', type=int, default=0)
 parser.add_argument('--vis-tag', type=str, nargs='+', default=[])
+parser.add_argument('--oracle-device', type=str, default='keyboard')
 
 args = parser.parse_args()
 
@@ -23,7 +24,13 @@ env, env_config = make_env(tags=args.env_tag, seed=args.seed)
 # if env_config.embodied_name == "dVRKEnv":
 #     env =  Visualizer(env, update_hz=100)
 # else:
-env =  LightChart_Visualizer(env)
+
+if args.action == "oracle":
+    env = ActionOracle(env, device=args.oracle_device)
+    
+env =  LightChart_Visualizer(env, subchart_keys=args.vis_tag,keyboard=args.action != "oracle")
+
+
 for _ in tqdm(range(args.repeat)):
     done = False
     obs = env.reset()
@@ -50,7 +57,5 @@ for _ in tqdm(range(args.repeat)):
     
         # print("reward:", reward, "done:", done, "info:", info, "step:", env.timestep, "obs_key:", obs.keys(), "fsm_state:", obs["fsm_state"])
         # print("observation space: ", env.observation_space)
-        char = env.gui_show()
+        env.gui_show()
         
-        if char == 'q':
-            break

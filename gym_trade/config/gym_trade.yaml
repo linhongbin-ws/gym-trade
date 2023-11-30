@@ -1,7 +1,9 @@
 default:
   seed: 0
   wrapper:
-    pipeline: [none]
+    pipeline: [DiscreteAction]
+    DiscreteAction:
+      action_scale: 1.0
   embodied_name: GymTradeEnv
   task_name: us_stock
   embodied:

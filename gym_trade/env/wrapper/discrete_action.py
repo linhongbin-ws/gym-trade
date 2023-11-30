@@ -6,22 +6,19 @@ class DiscreteAction(BaseWrapper):
                  action_scale=0.2,
                  **kwargs):
         super().__init__(env)
-        self._dis = {
-            "buy": np.array([1.0]),
-            "sell": np.array([-1.0]),
-            "hold": np.array([0.0]),
-        }
-        self._dis_name = ["buy", "sell", "hold"]
+        self._dis = [1.0, -1.0, 0.0] # buy, sell, hold
+        self._action_scale = action_scale
+
     @property
     def action_space(self):
         return gym.spaces.Discrete(len(self._dis))
     
-    def _dis2con(self, dis):
-        return self._dis[self._dis_name[dis]]
+    def _dis2con(self, dis): # discrete to continuous action
+        return self._dis[dis] * self._action_scale
     
     def step(self, action):
-        action = self_dis2con(action)
-        return self.env.step(action)
+        action = self._dis2con(action)
+        return self.env.step(np.array([action]))
     
     
     # def get_oracle_action(self):

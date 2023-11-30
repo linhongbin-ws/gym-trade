@@ -6,9 +6,7 @@ parser = argparse.ArgumentParser(
                     description='What the program does',
                     epilog='Text at the bottom of help')
 
-parser.add_argument('-p',type=int)
 args = parser.parse_args()
-/home/ben/code/trade/gym-trade/gym_trade/asset/mini_minute_data/
 
 from gym_trade.env.embodied import *
 from gym_trade.env.wrapper import *
@@ -16,7 +14,7 @@ env = GymTradeEnv(task='us_stock', csv_root_dir=str(Path(".") / "gym_trade" / "a
 env = LightChart_Visualizer(env)
 # env = Keyboard(env)
 obs = env.reset()
-env.render()
+env.gui_show()
 done = False
 while not done:
     action = env.action_space.sample()
@@ -24,7 +22,7 @@ while not done:
     print("=====timestep: {}====".format(env.timestep))
     print_obs = [k+":"+ str(v) for k,v in obs.items()]
     print("OBS: ", "| ".join(print_obs), "ACTION:", action, "Reward:",reward)
-    env.render()
+    ch = env.gui_show()
     if info["keyboard"] == 'q':
         break
 
