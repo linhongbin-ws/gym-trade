@@ -1,18 +1,21 @@
 default:
   seed: 0
   wrapper:
-    pipeline: [DiscreteAction]
+    pipeline: [DiscreteAction, ImageRepresent]
     DiscreteAction:
       action_scale: 1.0
+    ImageRepresent:
+      method: simple
   embodied_name: GymTradeEnv
   task_name: us_stock
   embodied:
     GymTradeEnv:
       us_stock:
-        csv_root_dir: ''
+        csv_root_dir: ""
         init_balance: 100
         commission_type: "futu"
         reward_type: "pnl_delta_dense"
         obs_keys: ["stat_posRate"]
-        stat_keys: ["stat_pos", "stat_posRate", "stat_pnl", "stat_balance", "stat_cash"]
+        stat_keys:
+          ["stat_pos", "stat_posRate", "stat_pnl", "stat_balance", "stat_cash"]
         action_min_thres: 0.1

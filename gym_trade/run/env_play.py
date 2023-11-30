@@ -1,5 +1,5 @@
 from gym_trade.api import make_env
-from gym_trade.env.wrapper import LightChart_Visualizer, ActionOracle
+from gym_trade.env.wrapper import LightChart_Visualizer, ActionOracle,CV_Visualizer
 import argparse
 from tqdm import tqdm
 import time
@@ -29,7 +29,7 @@ if args.action == "oracle":
     env = ActionOracle(env, device=args.oracle_device)
     
 env =  LightChart_Visualizer(env, subchart_keys=args.vis_tag,keyboard=args.action != "oracle")
-
+env = CV_Visualizer(env, keyboard=False)
 
 for _ in tqdm(range(args.repeat)):
     done = False
@@ -57,5 +57,8 @@ for _ in tqdm(range(args.repeat)):
     
         # print("reward:", reward, "done:", done, "info:", info, "step:", env.timestep, "obs_key:", obs.keys(), "fsm_state:", obs["fsm_state"])
         # print("observation space: ", env.observation_space)
+        imgs = env.render()
         env.gui_show()
+        env.cv_show(imgs)
+
         
