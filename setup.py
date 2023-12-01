@@ -4,7 +4,7 @@ setup(name='gym_trade',
       version='1.0',
     install_requires=[
         'gym<=0.23.1', 
-        # 'opencv-python==4.2.0.34',
+        'opencv-python==4.1.2.30', # <=4.1 , avoid conflit with pyqt5, https://blog.csdn.net/Torch_HXM/article/details/123807278
         'ruamel.yaml<=0.17',
         'pandas',
         'numpy',
@@ -16,7 +16,5 @@ setup(name='gym_trade',
         'pynput',
         'PyGObject',
         'pywebview[qt]',
-        # 'opencv-python-headless', # dont use opencv-python, https://forum.qt.io/topic/119109/using-pyqt5-with-opencv-python-cv2-causes-error-could-not-load-qt-platform-plugin-xcb-even-though-it-was-found/8
-        # 'opencv-contrib-python',
         ], 
       packages=find_packages())

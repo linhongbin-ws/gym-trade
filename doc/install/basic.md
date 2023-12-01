@@ -5,7 +5,7 @@
 ```sh
 touch ./init.sh
 echo "ANACONDA_PATH="$HOME/anaconda3""  >> ./init.sh # modify according to your installation 
-echo "ENV_NAME=gym_trade" >> ./init.sh
+echo "ENV_NAME=gym-trade" >> ./init.sh
 ```
 
 ## 1.2. Install gym_trade
@@ -13,7 +13,7 @@ echo "ENV_NAME=gym_trade" >> ./init.sh
 ```sh
 source ./init.sh
 sudo apt install libgirepository1.0-dev -y
-conda create -n $ENV_NAME python=3.9 -y
+conda create -n $ENV_NAME python=3.8 -y # python=3.9 not work for opencv-python <=4.1 and >=4
 conda activate $ENV_NAME
 conda install -c conda-forge libffi -y
 pip install -e .
