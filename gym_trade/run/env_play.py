@@ -16,6 +16,7 @@ parser.add_argument('--yaml-tag', type=str, nargs='+', default=[])
 parser.add_argument('--env-tag', type=str, nargs='+', default=[])
 parser.add_argument('--seed', type=int, default=0)
 parser.add_argument('--vis-tag', type=str, nargs='+', default=[])
+parser.add_argument('--lightchart-tag', type=str, nargs='+', default=[])
 parser.add_argument('--oracle-device', type=str, default='keyboard')
 
 args = parser.parse_args()
@@ -28,8 +29,8 @@ env, env_config = make_env(tags=args.env_tag, seed=args.seed)
 if args.action == "oracle":
     env = ActionOracle(env, device=args.oracle_device)
     
-env =  LightChart_Visualizer(env, subchart_keys=args.vis_tag,keyboard=args.action != "oracle")
-env = CV_Visualizer(env, keyboard=False)
+env =  LightChart_Visualizer(env, subchart_keys=args.lightchart_tag,keyboard=args.action != "oracle")
+env = CV_Visualizer(env, keyboard=False, vis_tag=args.vis_tag)
 
 for _ in tqdm(range(args.repeat)):
     done = False
@@ -63,9 +64,10 @@ for _ in tqdm(range(args.repeat)):
         print(" | ".join(print_obs))
         print("reward:", reward, "done:", done,)
     
-        # print("reward:", reward, "done:", done, "info:", info, "step:", env.timestep, "obs_key:", obs.keys(), "fsm_state:", obs["fsm_state"])
+        print("reward:", reward, "done:", done, "info:", info, "step:", env.timestep, "obs_key:", obs.keys(),)
         # print("observation space: ", env.observation_space)
         imgs = env.render()
+        imgs.update(obs)
         # print("ddd")
         env.cv_show(imgs)
         # print("fff")

@@ -19,7 +19,7 @@ class US_Stock_Env(gym.Env):
                     csv_root_dir='', 
                     init_balance=100,
                     commission_type = "futu", 
-                    reward_type='pnl_delta_dense',
+                    reward_type='pnl_delta_sparse',
                     obs_keys=["stat_posRate"],
                     stat_keys=['stat_pos', 'stat_posRate', 'stat_pnl','stat_balance','stat_cash',],
                     action_min_thres=0.1,
@@ -54,21 +54,27 @@ class US_Stock_Env(gym.Env):
         assert self._timestep <=self._df.shape[0] - 1
 
         self._update_stats(action) 
-
+        self._update_reward(action)
+        print("action", action)
         #======= outputs========
         info = {}
         obs = self._get_obs()
         done = self._fsm()
-        reward = self._get_reward() 
 
-        return obs, reward, done, info
+        return obs, self._reward, done, info
 
-    def _get_reward(self):
-        if self._reward_type == "pnl_delta_dense":
-            pnl_delta = self._df['stat_pnl'].iloc[self._timestep]-self._df['stat_pnl'].iloc[self._timestep-1]
-            return pnl_delta
+    def _update_reward(self, action):
+        sparse_update_condition = self._df['stat_posRate'].iloc[self._timestep]<=0 and (self._df['stat_posRate'].iloc[self._timestep-1]>0)
+        print(self._df['stat_posRate'].iloc[self._timestep])
+        if sparse_update_condition and self._reward_type == "pnl_delta_sparse":
+            self._reward = 0
         else:
-            raise NotImplementedError
+            self._reward =  self._df['stat_pnl'].iloc[self._timestep]-self._stat_pnl_prv
+
+        if (sparse_update_condition and self._reward_type == "pnl_delta_sparse") or self._reward_type == "pnl_delta_dense":
+            self._stat_pnl_prv = self._df['stat_pnl'].iloc[self._timestep]
+        
+
     def _fsm(self):
         done = self.timestep >= (len(self._df.index)-1) 
         return done
@@ -108,6 +114,9 @@ class US_Stock_Env(gym.Env):
         self._df['stat_pos'].iloc[self._timestep] = 0
         self._df['stat_posRate'].iloc[self._timestep] = 0
         self._df['stat_pnl'].iloc[self._timestep] = 0
+
+        self._stat_pnl_prv = 0
+        self._reward = 0
     
 
 

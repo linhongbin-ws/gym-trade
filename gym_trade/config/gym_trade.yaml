@@ -1,11 +1,19 @@
 default:
   seed: 0
   wrapper:
-    pipeline: [DiscreteAction, ImageRepresent]
+    pipeline: [DiscreteAction, ImageRepresent,OBS]
     DiscreteAction:
       action_scale: 1.0
     ImageRepresent:
       method: simple
+    OBS:
+      image_obs_key: ["rgb"]
+      direct_render_key: ["rgb"]
+      is_vector2image: true
+      vector2image_type: "row"
+      image_resize: [64,64]
+      cv_interpolate: "area"
+
   embodied_name: GymTradeEnv
   task_name: us_stock
   embodied:
@@ -14,7 +22,7 @@ default:
         csv_root_dir: ""
         init_balance: 100
         commission_type: "futu"
-        reward_type: "pnl_delta_dense"
+        reward_type: "pnl_delta_sparse"
         obs_keys: ["stat_posRate"]
         stat_keys:
           ["stat_pos", "stat_posRate", "stat_pnl", "stat_balance", "stat_cash"]
