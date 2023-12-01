@@ -119,8 +119,8 @@ class CV2_Visualizer():
             cnt = 0
             pic_length = int(gui_length / len(imgs_dict))
             pic_num = len(imgs_dict)
-            colum = np.int(np.ceil(np.sqrt(pic_num)))
-            total_num = np.int(colum*colum)
+            colum = np.int32(np.ceil(np.sqrt(pic_num)))
+            total_num = np.int32(colum*colum)
             for j in range((total_num-pic_num)%colum):
                 imgs_dict[j] = np.zeros((4,4,3), dtype=np.uint8)
             img_list = list(imgs_dict.items())
@@ -178,7 +178,7 @@ class CV2_Visualizer():
                     # print("")
                     break
             else:
-                _q = cv2.waitKey(1)
+                _q = cv2.waitKey(100)
                 break
         return is_quit
 

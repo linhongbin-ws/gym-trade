@@ -34,21 +34,29 @@ env = CV_Visualizer(env, keyboard=False)
 for _ in tqdm(range(args.repeat)):
     done = False
     obs = env.reset()
+    print("reset timestep", env.timestep, )
     # print("obs:", obs)
     while not done:
         # action = env.action_space.sample()
         # print(action)
-        print("==========step", env.timestep, "===================")
+        print("=============================")
+        print("call get action.....", end="")
         if any(i.isdigit() for i in args.action):
+            print('g')
             action = int(args.action)
         elif args.action == "random":
+            print('k')
             action = env.action_space.sample()
         elif args.action == "oracle":
+            
             action = env.get_oracle_action()
+            print("done")
         else:
             raise NotImplementedError
-        print("step....")
+        print("step....", end='')
         obs, reward, done, info = env.step(action)
+        print("done")
+        print("Timestep:", env.timestep,)
         print_obs = obs.copy()
         print_obs = {k: v.shape if k in ["image","rgb","depth"] else v for k,v in print_obs.items()}
         print_obs = [str(k)+ ":" +str(v) for k,v in print_obs.items()]
@@ -58,7 +66,10 @@ for _ in tqdm(range(args.repeat)):
         # print("reward:", reward, "done:", done, "info:", info, "step:", env.timestep, "obs_key:", obs.keys(), "fsm_state:", obs["fsm_state"])
         # print("observation space: ", env.observation_space)
         imgs = env.render()
-        env.gui_show()
+        # print("ddd")
         env.cv_show(imgs)
-
+        # print("fff")
+        env.gui_show()
+        # print("ggg")
+        
         
