@@ -35,5 +35,9 @@
 
 ## 1.9. demonstration from analytical strategy
 
-# 2. Experiment
+# 2. Algorithm
+
+- [ ] turtle trade
+
+
 

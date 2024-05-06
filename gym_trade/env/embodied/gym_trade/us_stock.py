@@ -20,8 +20,8 @@ class US_Stock_Env(gym.Env):
                     init_balance=100,
                     commission_type = "futu", 
                     reward_type='pnl_delta_sparse',
-                    obs_keys=["stat_posRate"],
-                    stat_keys=['stat_pos', 'stat_posRate', 'stat_pnl','stat_balance','stat_cash',],
+                    obs_keys=["position","open","close","high","low"],
+                    stat_keys=['stat_pos', 'position', 'stat_pnl','stat_balance','stat_cash',],
                     action_min_thres=0.1,
                     fix_buy_position=True,
                     **kwargs,
@@ -44,6 +44,7 @@ class US_Stock_Env(gym.Env):
 
     def reset(self):
         self._init_var()
+        print(self._df.columns)
         obs = self._get_obs()
         return obs
     
@@ -55,7 +56,7 @@ class US_Stock_Env(gym.Env):
 
         self._update_stats(action) 
         self._update_reward(action)
-        print("action", action)
+        # print("action", action)
         #======= outputs========
         info = {}
         obs = self._get_obs()
@@ -64,8 +65,8 @@ class US_Stock_Env(gym.Env):
         return obs, self._reward, done, info
 
     def _update_reward(self, action):
-        sparse_update_condition = self._df['stat_posRate'].iloc[self._timestep]<=0 and (self._df['stat_posRate'].iloc[self._timestep-1]>0)
-        print(self._df['stat_posRate'].iloc[self._timestep])
+        sparse_update_condition = self._df['position'].iloc[self._timestep]<=0 and (self._df['position'].iloc[self._timestep-1]>0)
+        # print(self._df['position'].iloc[self._timestep])
         if sparse_update_condition and self._reward_type == "pnl_delta_sparse":
             self._reward = 0
         else:
@@ -107,12 +108,13 @@ class US_Stock_Env(gym.Env):
 
         for stat in self._stat_keys:
             self._df[stat] = np.nan # create empty comlumn
+        print(self._df.columns)
         self._df["action"] = np.nan
         
         self._df['stat_balance'].iloc[self._timestep] = self._init_balance
         self._df['stat_cash'].iloc[self._timestep] = self._init_balance
         self._df['stat_pos'].iloc[self._timestep] = 0
-        self._df['stat_posRate'].iloc[self._timestep] = 0
+        self._df['position'].iloc[self._timestep] = 0
         self._df['stat_pnl'].iloc[self._timestep] = 0
 
         self._stat_pnl_prv = 0
@@ -167,7 +169,7 @@ class US_Stock_Env(gym.Env):
 
         self._df['stat_pnl'].iloc[self._timestep] = (self._df['stat_balance'].iloc[self._timestep] - self._init_balance)\
                                                                  / self._init_balance 
-        self._df['stat_posRate'].iloc[self._timestep] = (self._df['stat_balance'].iloc[self._timestep] - self._df['stat_cash'].iloc[self._timestep])\
+        self._df['position'].iloc[self._timestep] = (self._df['stat_balance'].iloc[self._timestep] - self._df['stat_cash'].iloc[self._timestep])\
                                                              / self._df['stat_balance'].iloc[self._timestep]
     def render(self):
         raise NotImplementedError
@@ -188,8 +190,10 @@ class US_Stock_Env(gym.Env):
     def observation_space(self):
         obs = {}
         for v in self._obs_keys:
-            if v=="stat_position_ratio":
-                obs[v] = gym.spaces.Box(low=0,high=1,shape=(1,),dtype=np.float)
+            if v=="position":
+                obs[v] = gym.spaces.Box(low=0,high=1,shape=(1,),dtype=float)
+            elif v in ["open","close","high","low"]:
+                obs[v] = gym.spaces.Box(low=-np.inf,high=np.inf,shape=(1,),dtype=float)
             else:
                 raise NotImplementedError
         return gym.spaces.Dict(obs)

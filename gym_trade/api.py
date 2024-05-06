@@ -1,6 +1,26 @@
 from gym_trade.tool.config import Config, load_yaml
 from pathlib import Path
 from gym_trade.env import wrapper as wp
+import argparse
+
+
+def get_args():
+    parser = argparse.ArgumentParser()
+    parser.add_argument('--env-tag', type=str, nargs='+', default=[])
+    parser.add_argument('--seed', type=int, default=0)   
+
+
+    parser.add_argument('--vis', type=str, nargs='+', default=[])
+    parser.add_argument('--vis-tag', type=str, nargs='+', default=[])
+    parser.add_argument('--lightchart-tag', type=str, nargs='+', default=[])
+
+    parser.add_argument('--repeat',type=int, default=1)
+    parser.add_argument('--action',type=str, default="oracle")
+    parser.add_argument('--oracle-device', type=str, default='keyboard')
+    args = parser.parse_args()
+    return args
+
+
 def make_env(env_config=None, tags=[], seed=0):
     assert isinstance(tags, list)
     if env_config is None:
