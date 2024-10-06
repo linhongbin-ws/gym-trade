@@ -13,6 +13,7 @@ class LightChart_Visualizer(BaseWrapper):
         super().__init__(env)
         if len(subchart_keys)==0:
              subchart_keys = list(self.unwrapped.df.columns.values)
+             subchart_keys = [k for k in subchart_keys if k not in ['date', 'open', 'high', 'low', 'close', 'volume',]]
         self._subchart_keys = subchart_keys
         self._init_chart()
         self._keyboard = Keyboard() if keyboard else None
