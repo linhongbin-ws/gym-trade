@@ -2,6 +2,10 @@ from gym_trade.tool.config import Config, load_yaml
 from pathlib import Path
 from gym_trade.env import wrapper as wp
 import argparse
+import pandas as pd
+from tqdm import tqdm
+from copy import deepcopy
+from gym_trade.tool import screen
 
 
 def get_args():
@@ -57,3 +61,31 @@ def make_env(env_config=None, tags=[], seed=0):
     env.seed = seed
     config = config.update({"seed": seed})
     return env, config
+
+
+def screen_daily(daily_hdf, funcs, return_high=False):
+    df_meta = pd.read_hdf(daily_hdf)
+    symbols = df_meta.columns.levels[0]
+    pbar = tqdm(symbols)
+    # fil_func_strs = {'pre_gap': {'ratio_lower_bd':0.02}}
+    results = {}
+    for symbol in pbar:
+        df = deepcopy(df_meta[symbol])
+        df.dropna(inplace=True)
+        if df.shape[0] <=1:
+            continue
+        for f in funcs:
+            screen_func = getattr(screen, f[0])
+            # print(f[1])
+            screen_args = {k:v for k,v in f[1].items()}
+            screen_args['df'] = df
+            if f[0] == "new_high" and return_high:
+                screen_args["return_high"] = True
+                df, new_high = screen_func(**screen_args)
+            else:
+                df = screen_func(**screen_args)
+                new_high = None
+        if df is not None:
+            results[symbol] = [pd.to_datetime(df.index), new_high]
+
+    return results

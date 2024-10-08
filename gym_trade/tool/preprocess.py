@@ -171,7 +171,7 @@ def fill_missing_frame(df: pd.DataFrame)-> pd.DataFrame:
     df_new['is_nan'] = df_new.isna().any(axis=1)
     # print(df)
     if df_new['is_nan'].any():
-        critical_nan = df_new[df_new['is_nan']&(~df_new['is_nan']).shift(1)]
+        critical_nan = df_new[df_new['is_nan']&(~df_new['is_nan']).shift(1)] # the beginning indexes if there is a continous nans
         critical_nonan = df_new.loc[critical_nan.index - timedelta(minutes=1)]
         df_new['open'].loc[critical_nan.index] = critical_nonan['close'].values
         df_new['high'].loc[critical_nan.index] = critical_nonan['close'].values
@@ -179,15 +179,15 @@ def fill_missing_frame(df: pd.DataFrame)-> pd.DataFrame:
         df_new['close'].loc[critical_nan.index] = critical_nonan['close'].values
         df_new['volume'].loc[critical_nan.index] = 0
 
-        if df_new['is_nan'].iloc[0]:
-            critical_nan = df_new[df_new['is_nan'] & (~df_new['is_nan']).shift(-1)]
-            critical_nonan = df_new.loc[critical_nan.index + timedelta(minutes=1)]
-            idx_nona = critical_nonan.index[0]
-            df_new['open'].iloc[0] =  df_new['close'].loc[idx_nona]
-            df_new['high'].iloc[0] = df_new['close'].loc[idx_nona]
-            df_new['low'].iloc[0] = df_new['close'].loc[idx_nona]
-            df_new['close'].iloc[0] = df_new['close'].loc[idx_nona]
-            df_new['volume'].iloc[0] = 0
+        # if df_new['is_nan'].iloc[0]:
+        #     critical_nan = df_new[df_new['is_nan'] & (~df_new['is_nan']).shift(-1)]
+        #     critical_nonan = df_new.loc[critical_nan.index + timedelta(minutes=1)]
+        #     idx_nona = critical_nonan.index[0]
+        #     df_new['open'].iloc[0] =  df_new['close'].loc[idx_nona]
+        #     df_new['high'].iloc[0] = df_new['close'].loc[idx_nona]
+        #     df_new['low'].iloc[0] = df_new['close'].loc[idx_nona]
+        #     df_new['close'].iloc[0] = df_new['close'].loc[idx_nona]
+        #     df_new['volume'].iloc[0] = 0
 
         df_new.fillna(method='ffill',inplace=True)
         # df_new.fillna(method='bfill',inplace=True)

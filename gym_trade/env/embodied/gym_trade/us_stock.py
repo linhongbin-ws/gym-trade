@@ -19,14 +19,14 @@ class US_Stock_Env(gym.Env):
                     init_balance=100,
                     commission_type = "futu", 
                     reward_type='pnl_delta_sparse',
-                    obs_keys=["position","open","close","high","low"],
-                    stat_keys=['stat_pos', 'position', 'stat_pnl','stat_balance','stat_cash',],
+                    obs_keys=["position_ratio","open","close","high","low"],
+                    stat_keys=['stat_pos', 'position_ratio', 'stat_pnl','stat_balance','stat_cash',],
                     action_min_thres=0.1,
                     fix_buy_position=True,
                     interval="minute",
                     **kwargs,
                     ):
-        self._csv_root_dir = str(pathlib.Path( __file__ ).absolute().parent.parent.parent.parent / "asset" / "mini_minute_data")  if csv_root_dir=='' else  csv_root_dir
+        _csv_root_dir = str(pathlib.Path( __file__ ).absolute().parent.parent.parent.parent / "asset" / "mini_minute_data")  if csv_root_dir=='' else  csv_root_dir
         self._init_balance = init_balance
         self._commission_type = commission_type
         self._reward_type = reward_type
@@ -38,7 +38,7 @@ class US_Stock_Env(gym.Env):
         self._interval = interval
         assert self._interval in ["day", "minute"]
         self.seed = 0
-        self. _update_csv_dir(self._csv_root_dir) # load csv directory
+        self. _update_csv_dir(_csv_root_dir) # load csv directory
         self._init_var() # init variables
 
     #====== gym api ========
@@ -69,8 +69,10 @@ class US_Stock_Env(gym.Env):
     def observation_space(self):
         obs = {}
         for v in self._obs_keys:
-            if v=="position":
+            if v=="position_ratio":
                 obs[v] = gym.spaces.Box(low=0,high=1,shape=(1,),dtype=float)
+            elif v=="timestep":
+                obs[v] = gym.spaces.Box(low=0,high=389,shape=(1,),dtype=int)
             elif v in ["open","close","high","low"]:
                 obs[v] = gym.spaces.Box(low=-np.inf,high=np.inf,shape=(1,),dtype=float)
             else:
@@ -96,8 +98,8 @@ class US_Stock_Env(gym.Env):
 
         # buy
         if action>=self._action_min_thres: 
-            _buy_cash = _cash_prv * action 
-            _buy_pos = _buy_cash // _open
+            _buy_cash = _cash_prv * action  # proportion to action value, 0.8 to save some money for commision
+            _buy_pos = _buy_cash // _open # buy at open point
             _buy_cash = _buy_pos * _open
             self._df['stat_cash'].iloc[self._timestep] = _cash_prv - _buy_cash - self._get_commision(_buy_pos)
             self._df['stat_pos'].iloc[self._timestep] = _pos_prv + _buy_pos 
@@ -118,11 +120,11 @@ class US_Stock_Env(gym.Env):
                                                         self._df['stat_cash'].iloc[self._timestep]
         self._df['stat_pnl'].iloc[self._timestep] = (self._df['stat_balance'].iloc[self._timestep] - self._init_balance)\
                                                                  / self._init_balance 
-        self._df['position'].iloc[self._timestep] = (self._df['stat_balance'].iloc[self._timestep] - self._df['stat_cash'].iloc[self._timestep])\
+        self._df['position_ratio'].iloc[self._timestep] = (self._df['stat_balance'].iloc[self._timestep] - self._df['stat_cash'].iloc[self._timestep])\
                                                              / self._df['stat_balance'].iloc[self._timestep]
 
     def _update_reward(self, action):
-        sparse_update_condition = self._df['position'].iloc[self._timestep]<=0 and (self._df['position'].iloc[self._timestep-1]>0)
+        sparse_update_condition = self._df['position_ratio'].iloc[self._timestep]<=0 and (self._df['position_ratio'].iloc[self._timestep-1]>0)
         if sparse_update_condition and self._reward_type == "pnl_delta_sparse":
             self._reward = 0
         else:
@@ -130,10 +132,12 @@ class US_Stock_Env(gym.Env):
         if (sparse_update_condition and self._reward_type == "pnl_delta_sparse") or self._reward_type == "pnl_delta_dense":
             self._stat_pnl_prv = self._df['stat_pnl'].iloc[self._timestep]
 
-    def _update_csv_dir(self, dir):
-        if isinstance(dir, str): 
+    def _update_csv_dir(self, dir_or_filelist):
+        if isinstance(dir_or_filelist, str): 
             # extract csv file path
-            self._csv_list = get_csv_dir(dir)
+            self._csv_list = get_csv_dir(dir_or_filelist)
+        elif isinstance(dir_or_filelist, list):    
+            self._csv_list = dir_or_filelist
         else:
             raise NotImplementedError
         assert len(self._csv_list)!=0, f"data_dir: {dir} got empty csv data files"
@@ -144,13 +148,13 @@ class US_Stock_Env(gym.Env):
     
     def _init_var(self):
         # init
-        self._csv_idx = self._rng_csv_idx.randint(0, len(self._csv_list)-1)
+        self._csv_idx = 0 if len(self._csv_list)==1 else self._rng_csv_idx.randint(0, len(self._csv_list)-1) 
         self._timestep = 0
 
         # read csv
         csv_file = self._csv_list[self._csv_idx]
         self._csv_name = csv_file
-        assert isfile(csv_file), f"{csv_file} is not a file"
+        # assert isfile(csv_file), f"{csv_file} is not a file"
         _df = pd.read_csv(csv_file)
         assert _df.shape[0]>0, f"{csv_file} got empty df data"
 
@@ -173,7 +177,7 @@ class US_Stock_Env(gym.Env):
         self._df['stat_balance'].iloc[self._timestep] = self._init_balance
         self._df['stat_cash'].iloc[self._timestep] = self._init_balance
         self._df['stat_pos'].iloc[self._timestep] = 0
-        self._df['position'].iloc[self._timestep] = 0
+        self._df['position_ratio'].iloc[self._timestep] = 0
         self._df['stat_pnl'].iloc[self._timestep] = 0
         self._stat_pnl_prv = 0
         self._reward = 0
@@ -181,7 +185,10 @@ class US_Stock_Env(gym.Env):
     def _get_obs(self):
         obs = {}
         for k in self._obs_keys:
-            obs[k] = self._df.iloc[self._timestep][k]
+            if k=="timestep":
+                obs[k] = self.timestep
+            else:
+                obs[k] = self._df.iloc[self._timestep][k]
         return obs
     
     def _get_commision(self, pos):
@@ -201,10 +208,7 @@ class US_Stock_Env(gym.Env):
     @property
     def timestep(self):
         return self._timestep
-    
-    @property
-    def timestep(self):
-        return self._timestep 
+
     
     @property
     def file(self):

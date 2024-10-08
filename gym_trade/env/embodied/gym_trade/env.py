@@ -19,6 +19,8 @@ class GymTradeEnv(BaseEnv):
         obs, reward, done, info = self.client.step(action)
         return obs, reward, done, info
 
+    def load_stock_list(self, file_list):
+        self.client._update_csv_dir(file_list)
 
     def render(self, **kwargs):
         return self.client.render()
@@ -49,3 +51,11 @@ class GymTradeEnv(BaseEnv):
     @property
     def df(self,):
         return self.client._df
+
+    @property
+    def file(self,):
+        return self.client.file
+    
+    @property
+    def pnl(self):
+        return self.client.pnl

@@ -7,7 +7,7 @@ default:
     ImageRepresent:
       method: simple
     OBS:
-      direct_map_key: ["position","open","close","high","low"]
+      direct_map_key: ["position_ratio","open","close","high","low", "timestep"]
       image_obs_key: ["rgb"]
       vector_obs_key: ["open", "close","high","low"]
       direct_render_key: ["rgb"]
@@ -26,12 +26,12 @@ default:
     GymTradeEnv:
       us_stock:
         csv_root_dir: ""
-        init_balance: 100
+        init_balance: 1e6
         commission_type: "futu"
         reward_type: "pnl_delta_sparse"
-        obs_keys: ["position","open","close","high","low"]
+        obs_keys: ["position_ratio","open","close","high","low","timestep"]
         stat_keys:
-          ["stat_pos", "position", "stat_pnl", "stat_balance", "stat_cash"]
+          ["stat_pos", "position_ratio", "stat_pnl", "stat_balance", "stat_cash"]
         action_min_thres: 0.1
 
 donchain:
