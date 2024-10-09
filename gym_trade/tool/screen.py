@@ -1,6 +1,9 @@
 
 
 
+def price_limit(df, upper_limit, lower_limit):
+    new_df = df[(df['Close'] >= lower_limit)& (df['Close']<= upper_limit)].copy()
+    return new_df
 
 
 

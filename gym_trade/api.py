@@ -74,6 +74,7 @@ def screen_daily(daily_hdf, funcs, return_high=False):
         df.dropna(inplace=True)
         if df.shape[0] <=1:
             continue
+        new_high = None
         for f in funcs:
             screen_func = getattr(screen, f[0])
             # print(f[1])
@@ -84,7 +85,7 @@ def screen_daily(daily_hdf, funcs, return_high=False):
                 df, new_high = screen_func(**screen_args)
             else:
                 df = screen_func(**screen_args)
-                new_high = None
+
         if df is not None:
             results[symbol] = [pd.to_datetime(df.index), new_high]
 

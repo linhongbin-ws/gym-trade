@@ -8,7 +8,7 @@ from gym_trade.tool.parallel import Parallel
 from dataclasses import dataclass
 env, env_config = make_env(tags=[], seed=0)
 hdf = "~/ssd/data/stock-data/us-daily/kdaily-2024-10-06/US-daily-20190101-20241006.h5"
-stock_dates = screen_daily(hdf, [("new_high", {"period": 52})], return_high=True)
+stock_dates = screen_daily(hdf, [("new_high", {"period": 52}), ("price_limit", {"upper_limit": 100, "lower_limit": 5}) ], return_high=True)
 # print(stock_dates)
 
 root_minute_dir = "~/ssd/data/stock-data/us-minute/"
@@ -23,7 +23,8 @@ for k,v in tqdm(stock_dates.items()):
         if minute_path.exists():
             csv_list.append([str(minute_path),v[1][i]])
         # print(str(minute_path))
-
+print("csv_list: ", len(csv_list))
+# print(csv_list)
 
 def backtest(csv_file,high_price):
     env, env_config = make_env(tags=[], seed=0)
@@ -61,10 +62,12 @@ class parallel(Parallel):
 #     file_name = Path(csv).stem
 #     pnl_results.append([pnl, file_name])
 # print(pnl_results)
-p = parallel(worker_type="process")
-pnl_results = p.run(csv_list)
-df = pd.DataFrame(pnl_results,columns =['pnl', 'file'])
-print(df)
-print("mean pnl (%):",df['pnl'].mean())
-df.to_csv("./test/pnl.csv")
-p.close()
+    
+
+# p = parallel(worker_type="process")
+# pnl_results = p.run(csv_list)
+# df = pd.DataFrame(pnl_results,columns =['pnl', 'file'])
+# print(df)
+# print("mean pnl (%):",df['pnl'].mean())
+# df.to_csv("./test/pnl.csv")
+# p.close()
