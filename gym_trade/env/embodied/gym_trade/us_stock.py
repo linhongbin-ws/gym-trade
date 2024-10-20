@@ -205,6 +205,8 @@ class US_Stock_Env(gym.Env):
     def df(self):
         return self._df
     
+
+    
     @property
     def timestep(self):
         return self._timestep

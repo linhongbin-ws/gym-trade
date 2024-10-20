@@ -51,6 +51,9 @@ class GymTradeEnv(BaseEnv):
     @property
     def df(self,):
         return self.client._df
+    @df.setter
+    def df(self, df):
+        self.client._df = df
 
     @property
     def file(self,):

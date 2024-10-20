@@ -63,30 +63,33 @@ def make_env(env_config=None, tags=[], seed=0):
     return env, config
 
 
-def screen_daily(daily_hdf, funcs, return_high=False):
+def screen_daily(daily_hdf, funcs, return_high=False, symbol_list=[]):
     df_meta = pd.read_hdf(daily_hdf)
     symbols = df_meta.columns.levels[0]
     pbar = tqdm(symbols)
     # fil_func_strs = {'pre_gap': {'ratio_lower_bd':0.02}}
     results = {}
     for symbol in pbar:
+        if (not symbol in symbol_list) and (len(symbol_list)!=0):
+            continue
         df = deepcopy(df_meta[symbol])
         df.dropna(inplace=True)
         if df.shape[0] <=1:
             continue
         new_high = None
+        df_bools = None
         for f in funcs:
             screen_func = getattr(screen, f[0])
             # print(f[1])
             screen_args = {k:v for k,v in f[1].items()}
             screen_args['df'] = df
-            if f[0] == "new_high" and return_high:
-                screen_args["return_high"] = True
-                df, new_high = screen_func(**screen_args)
-            else:
-                df = screen_func(**screen_args)
+            if f[0] == "new_high":
+                df, df_bool = screen_func(**screen_args)
+                df_bools = df_bool if df_bools is None else df_bools | df_bool
+        
+        df = df[df_bools]
 
         if df is not None:
-            results[symbol] = [pd.to_datetime(df.index), new_high]
+            results[symbol] = [pd.to_datetime(df.index), df['Prv_High'].to_list(), df['Close'].to_list()]
 
     return results
