@@ -63,7 +63,7 @@ def make_env(env_config=None, tags=[], seed=0):
     return env, config
 
 
-def screen_daily(daily_hdf, funcs, return_high=False, symbol_list=[]):
+def screen_daily(daily_hdf, config_screen, return_high=False, symbol_list=[]):
     df_meta = pd.read_hdf(daily_hdf)
     symbols = df_meta.columns.levels[0]
     pbar = tqdm(symbols)
@@ -77,9 +77,10 @@ def screen_daily(daily_hdf, funcs, return_high=False, symbol_list=[]):
             continue
         df_bools = None
         new_column_names = ['Close']
-        for f in funcs:
-            screen_func = getattr(screen, f[0])
-            screen_args = {k:v for k,v in f[1].items()}
+        for f in config_screen.pipeline:
+            screen_func = getattr(screen, f)
+            screen_args = getattr(config_screen, f).flat
+            # print(screen_args)
             screen_args['df'] = df
             df, df_bool, new_column_name = screen_func(**screen_args)
             df_bools = df_bool if df_bools is None else df_bools & df_bool
@@ -100,3 +101,24 @@ def screen_daily(daily_hdf, funcs, return_high=False, symbol_list=[]):
             results[symbol] = df_results
 
     return results
+
+def make_policy(policy_name, env):
+    import importlib
+    module_dir = 'gym_trade.policy.'+ policy_name
+    module = importlib.import_module(module_dir)
+    cls = getattr(module, 'Policy')
+    return cls(env)
+
+
+def backtest(env_tag, policy, minute_path, **kwargs):
+    env, env_config = make_env(tags=env_tag, seed=0)
+    env.load_stock_list([minute_path])
+    obs = env.reset()
+
+    p = make_policy(policy, env)
+    p.init_policy(**kwargs)
+    done = False
+    while not done:
+        action = p(obs)
+        obs, reward, done, info = env.step(action)
+    return env.pnl

@@ -32,4 +32,15 @@ default:
         stat_keys:
           ["stat_pos", "position_ratio", "stat_pnl", "stat_balance", "stat_cash"]
         action_min_thres: 0.1
+  
+  screen:
+    pipeline: [price_limit, new_high, new_volume_high]
+    price_limit:
+      upper_limit: 100 
+      lower_limit: 5
+    new_high:
+      period: 52                          
+    new_volume_high:
+      period: 52 
+      
 
