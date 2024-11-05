@@ -18,14 +18,13 @@ class Parallel(ABC):
 
     def __init__(self, worker_type="thread", worker_num=10):
         if worker_type == "thread":
-            from queue import Queue
+            from queue import Queue, Event
         else:
-            from multiprocessing import Queue
+            from multiprocessing import Queue, Event
         self.request_queue = Queue()
         self.return_queue = Queue()
-        self.close_queue = Queue()
+        self.stop_event = Event()
         self.workers: List = [] # a list of thread objects
-        self.is_active: bool = False # monitor if the workers are active
         self.verbose_level = 2 # 0 for no printing
                                # 1 for some important printing
                                # 2 for no printing
@@ -46,7 +45,7 @@ class Parallel(ABC):
         """ a thread function running in the loop
         """
 
-        while True:
+        while not self.stop_event.is_set():
             try:
                 request = self.request_queue.get(block=False)
                 return_msg = self.parallel_func(request)
@@ -58,17 +57,17 @@ class Parallel(ABC):
             except Exception as e:
                 if self.verbose_level>1:
                     print(e)
-            try:
-                is_break = self.close_queue.get(block=False)
-                if is_break:
-                    break
-                break
-            except Empty:
-                continue
+            # try:
+            #     is_break = self.close_queue.get(block=False)
+            #     if is_break:
+            #         break
+            #     break
+            # except Empty:
+            #     continue
 
-            except Exception as e:
-                if self.verbose_level>1:
-                    print(e)
+            # except Exception as e:
+            #     if self.verbose_level>1:
+            #         print(e)
 
 
     def run(self, input_list):
@@ -77,7 +76,7 @@ class Parallel(ABC):
         print("Initialize {} workers..".format( self.worker_num))
 
         # intialize process
-        self.is_active = True
+
         for index in range( self.worker_num):
             if self.worker_type == "thread":
                 thread = threading.Thread(target=self._worker)
@@ -96,7 +95,7 @@ class Parallel(ABC):
         self.wait_for_workers()
         return_list = []
         print("get return list")
-        for i in range(self.return_queue.qsize()):
+        for _ in range(len(input_list)):
             return_list.append(self.return_queue.get())
         return return_list
     
@@ -108,7 +107,7 @@ class Parallel(ABC):
         pbar = tqdm(total=total)
         count = 0
 
-        while True:
+        while not self.request_queue.empty():
             if count != total - self.request_queue.qsize():
                 delta = total - self.request_queue.qsize() - count
                 count = total - self.request_queue.qsize()
@@ -125,17 +124,16 @@ class Parallel(ABC):
         """close the manager including thread process
         """
 
-        if self.is_active:
-            # break the thread function loop
-            for w in self.workers:
-                self.close_queue.put(True)
 
-            print("wait worker join...")
-            # wait for workers exit
-            for w in self.workers:
-                w.join()
+        # break the thread function loop
+        self.stop_event.set()
 
-            # destroy all thread objects
-            for w in self.workers:
-                del(w)
+        print("wait worker join...")
+        # wait for workers exit
+        for w in self.workers:
+            w.join()
+
+        # destroy all thread objects
+        for w in self.workers:
+            del(w)
         print("close data manager")

@@ -7,7 +7,7 @@ default:
     ImageRepresent:
       method: simple
     OBS:
-      direct_map_key: ["position_ratio","open","close","high","low", "timestep"]
+      direct_map_key: ["position_ratio","open","close","high","low", "timestep","volume"]
       image_obs_key: ["rgb"]
       vector_obs_key: ["open", "close","high","low"]
       direct_render_key: ["rgb"]
@@ -18,7 +18,7 @@ default:
     TA:
       ma5: {func: ma, key: close, window: 5}
       break_high: {func: break_high, key: high}
-      break_high_or: {func: rolling_op, key: break_high, operation: or, window: 3}
+      break_high_or: {func: rolling_op, key: break_high, operation: or, window: 1}
   embodied_name: GymTradeEnv
   task_name: us_stock
   embodied:
@@ -28,7 +28,7 @@ default:
         init_balance: 1e6
         commission_type: "futu"
         reward_type: "pnl_delta_sparse"
-        obs_keys: ["position_ratio","open","close","high","low","timestep"]
+        obs_keys: ["position_ratio","open","close","high","low","timestep","volume"]
         stat_keys:
           ["stat_pos", "position_ratio", "stat_pnl", "stat_balance", "stat_cash"]
         action_min_thres: 0.1

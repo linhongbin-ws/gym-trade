@@ -67,7 +67,6 @@ def screen_daily(daily_hdf, funcs, return_high=False, symbol_list=[]):
     df_meta = pd.read_hdf(daily_hdf)
     symbols = df_meta.columns.levels[0]
     pbar = tqdm(symbols)
-    # fil_func_strs = {'pre_gap': {'ratio_lower_bd':0.02}}
     results = {}
     for symbol in pbar:
         if (not symbol in symbol_list) and (len(symbol_list)!=0):
@@ -76,20 +75,28 @@ def screen_daily(daily_hdf, funcs, return_high=False, symbol_list=[]):
         df.dropna(inplace=True)
         if df.shape[0] <=1:
             continue
-        new_high = None
         df_bools = None
+        new_column_names = ['Close']
         for f in funcs:
             screen_func = getattr(screen, f[0])
-            # print(f[1])
             screen_args = {k:v for k,v in f[1].items()}
             screen_args['df'] = df
-            if f[0] == "new_high":
-                df, df_bool = screen_func(**screen_args)
-                df_bools = df_bool if df_bools is None else df_bools | df_bool
+            df, df_bool, new_column_name = screen_func(**screen_args)
+            df_bools = df_bool if df_bools is None else df_bools & df_bool
+            if new_column_name is not None:
+                new_column_names.append(new_column_name)
         
         df = df[df_bools]
 
+        if len(df.index) == 0:
+            continue
+
+        df_results = {}
+        df_results['dates'] = pd.to_datetime(df.index)
+        for v in new_column_names:
+            # print(v)
+            df_results[v] = df[v].to_list()
         if df is not None:
-            results[symbol] = [pd.to_datetime(df.index), df['Prv_High'].to_list(), df['Close'].to_list()]
+            results[symbol] = df_results
 
     return results
