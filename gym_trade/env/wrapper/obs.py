@@ -62,8 +62,14 @@ class OBS(BaseWrapper):
 
     def _get_obs(self, _obs):
         obs = {}
-        for v in self._direct_map_key:
-            obs[v] = _obs[v]
+        if "all" in self._direct_map_key:
+            obs = {k:v for k,v in _obs.items()}
+            # for k,_ in _obs.items():
+            #     obs[v] = _obs[v]
+        else:
+            for v in self._direct_map_key:
+                obs[v] = _obs[v]
+            
         _img = self.env.render()
         if "depth" in _img:
             _img["depth"] = np.stack([_img["depth"]]*3, axis=2)

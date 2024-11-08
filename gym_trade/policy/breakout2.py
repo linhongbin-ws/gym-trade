@@ -1,5 +1,5 @@
 from gym_trade.policy.base import BasePolicy
-
+import numpy as np
 
 class Policy(BasePolicy):
     def init_policy(self, **kwargs):
@@ -8,6 +8,8 @@ class Policy(BasePolicy):
         self.calibrate_volume_high = Prv_Volme_High / (self.env.unwrapped.df['close'].iloc[-1] / Close)
         self.agg_volume = 0
         self.bk_or_prv = False
+        self.high_close_price_after_buy = None
+        self.close_price_buy = None
         if self.gui:
             self.env.gui_init()
             self.env.gui_horizon_line(self.calibrate_high_price, text="previous high price")
@@ -15,21 +17,36 @@ class Policy(BasePolicy):
 
     def __call__(self, obs, **kwargs):
         self.agg_volume+=obs['volume']
+        if obs["position_ratio"]>0.1:
+            self.high_close_price_after_buy = np.maximum(obs['close'], self.high_close_price_after_buy)
+            h2c = (self.high_close_price_after_buy - self.close_price_buy) / self.close_price_buy
+            pnl = (obs['close'] - self.close_price_buy) / self.close_price_buy
+        else:
+            h2c = 1
+            pnl = 0
+
+       
         if obs['break_high'] \
             and obs["position_ratio"]<=0.1 \
             and self.env.timestep > 0 \
-            and obs['high'] > self.calibrate_high_price\
+            and obs['close'] > self.calibrate_high_price\
             and self.agg_volume > self.calibrate_volume_high\
                 :
             action = 0 
-        elif obs['timestep']>=388 and obs["position_ratio"]>0.1:
+            self.close_price_buy = obs['close']
+            self.high_close_price_after_buy = obs['close']
+
+        elif ((obs['timestep']>=388) 
+              or (pnl < -0.01)
+              or ((pnl > 0.1) and (h2c<0.5))
+              ) \
+             and obs["position_ratio"]>0.1:
             action =1
-            # print("sell when market close")
-        elif (self.bk_or_prv and (not obs['break_high_or'])) and obs["position_ratio"]>0.1:
-            action =1
-            # print("sell")
+            self.high_close_price_after_buy = None
+            self.close_price_buy = None
         else:
             action = 2
+        
 
 
         self.bk_or_prv = obs['break_high_or']

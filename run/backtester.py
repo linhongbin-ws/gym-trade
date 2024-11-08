@@ -15,15 +15,17 @@ parser.add_argument('--daydir', type=str, default="~/ssd/data/stock-data/us-dail
 parser.add_argument('--mindir', type=str, default="~/ssd/data/stock-data/us-minute/")
 parser.add_argument('--worker', type=int, default=1)
 parser.add_argument('--policy', type=str, default="breakout")
-parser.add_argument('--symbol', type=str, default=['GME'])
+parser.add_argument('--symbol', type=str, nargs='+', default=[])
 parser.add_argument('--savedir', type=str, default='./data/backtest')
+parser.add_argument('--gui', action="store_true")
+parser.add_argument('--date', type=str, nargs='+', default=[])
 in_args = parser.parse_args()
 
 env, env_config = make_env(tags=in_args.env_tag, seed=0)
 hdf = in_args.daydir
 root_minute_dir = in_args.mindir
 is_parallel = in_args.worker > 1
-gui = False
+gui = in_args.gui
 
 
 
@@ -31,12 +33,15 @@ gui = False
 stock_dates = screen_daily(hdf, 
                            env_config.screen,
                             symbol_list=in_args.symbol,
+                            dates=in_args.date
                            )
+
 cnt = 0
 for k,v in stock_dates.items():
-    for _ in range(len(v['dates'])):
+    for d in range(len(v['dates'])):
         cnt+=1
 print(f"screen num: {cnt}")
+
 
 
 # check if minute files exit
@@ -69,7 +74,12 @@ if not is_parallel:
 else: 
     class parallel(Parallel):
         def parallel_func(self, input):
-            pnl = backtest(**input)
+            global in_args
+            new_args = deepcopy(input)
+            new_args['policy'] = in_args.policy
+            new_args['gui'] = False
+            new_args['env_tag'] = in_args.env_tag
+            pnl = backtest(**new_args)
             file_name = Path(input['minute_path']).stem
             return [pnl, file_name]
             # print(csv_file)
@@ -78,11 +88,13 @@ else:
     pnl_results = [v for v in pnl_results if v is not None]
 
 df = pd.DataFrame(pnl_results,columns =['pnl', 'file'])
+df.sort_values(by=['pnl'],inplace=True)
 print(df)
 print("mean pnl (%):",df['pnl'].mean(),"std pnl (%):",df['pnl'].std(),)
 savedir = Path(in_args.savedir)
 savedir.mkdir(parents=True, exist_ok=True)
 file_name = savedir / (datetime.now().strftime("%Y-%d-%m-%H-%M-%S")+ ".csv")
+
 df.to_csv(str(file_name))
 
 if is_parallel:

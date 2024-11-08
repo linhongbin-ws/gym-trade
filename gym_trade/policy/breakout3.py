@@ -1,5 +1,5 @@
 from gym_trade.policy.base import BasePolicy
-
+import numpy as np
 
 class Policy(BasePolicy):
     def init_policy(self, **kwargs):
@@ -8,31 +8,78 @@ class Policy(BasePolicy):
         self.calibrate_volume_high = Prv_Volme_High / (self.env.unwrapped.df['close'].iloc[-1] / Close)
         self.agg_volume = 0
         self.bk_or_prv = False
+        self.high_close_price_after_buy = None
+        self.close_price_buy = None
+        self.break_high_prv = True
+        self.buycnt = 0
+        self.max_loss = 0.06
+        self.trade_curb_exist = False
+        self.max_hold_timestep = 100
+        self.hold_timestep_cnt = 0
+        self.position_ratio_prv = 0
+        self.price_limit_high = 100
+        self.price_limit_low = 5
         if self.gui:
             self.env.gui_init()
             self.env.gui_horizon_line(self.calibrate_high_price, text="previous high price")
             self.env.gui_textbox("symbol", self.env.file)
 
     def __call__(self, obs, **kwargs):
+        if obs['close'] < self.price_limit_low or obs['close'] > self.price_limit_high:
+            action = 2
+            return action
+
+        if self.position_ratio_prv<0.1 and obs['position_ratio']>0.1:
+            self.close_price_buy = self.env.unwrapped.df['close'].iloc[self.env.timestep-1]
+            self.high_close_price_after_buy = self.env.unwrapped.df['close'].iloc[self.env.timestep-1]
+            self.buycnt+=1
+        if self.position_ratio_prv>0.1 and obs['position_ratio']<0.1:
+            self.high_close_price_after_buy = None
+            self.close_price_buy = None
+            self.hold_timestep_cnt = 0
+
+        if obs['trade_curb']:
+            self.trade_curb_exist = True
+
         self.agg_volume+=obs['volume']
-        if obs['break_high'] \
+        if obs["position_ratio"]>0.1:
+            self.high_close_price_after_buy = np.maximum(obs['close'], self.high_close_price_after_buy)
+            h2c = (obs['close'] - self.close_price_buy) / (self.high_close_price_after_buy - self.close_price_buy)
+            pnl = (obs['close'] - self.close_price_buy) / self.close_price_buy
+        else:
+            h2c = 1
+            pnl = 0
+
+
+       
+        if  (obs['break_high'] and not self.break_high_prv) \
             and obs["position_ratio"]<=0.1 \
             and self.env.timestep > 0 \
-            and obs['high'] > self.calibrate_high_price\
+            and obs['close'] > self.calibrate_high_price\
             and self.agg_volume > self.calibrate_volume_high\
+            and self.buycnt <1\
+            and not self.trade_curb_exist\
                 :
             action = 0 
-        elif obs['timestep']>=388 and obs["position_ratio"]>0.1:
+
+
+        elif ((obs['timestep']>=388) 
+              or (pnl < -self.max_loss)
+              or ((pnl > 0.1) and (h2c<0.5))
+            #   or (self.hold_timestep_cnt >= self.max_hold_timestep)
+                or (self.trade_curb_exist)
+              ) \
+             and obs["position_ratio"]>0.1:
             action =1
-            # print("sell when market close")
-        elif (self.bk_or_prv and (not obs['break_high_or'])) and obs["position_ratio"]>0.1:
-            action =1
-            # print("sell")
         else:
             action = 2
-
+        
+        if action == 1 and obs["position_ratio"]>0.1:
+            self.hold_timestep_cnt +=1
 
         self.bk_or_prv = obs['break_high_or']
+        self.break_high_prv = obs['break_high']
+        self.position_ratio_prv = obs["position_ratio"]
         return action
         
 

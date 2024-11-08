@@ -36,3 +36,15 @@ def rolling_op(df, key, operation, window):
     else:
         raise NotImplementedError
     return seri
+
+def direction(df, key):
+    _df = df.copy()
+    seri = (_df[key] - _df[key].shift(1))>0
+    return seri
+
+def trade_curb(df):
+    _df = df.copy()
+    seri1 = _df['high'] == _df['low']
+    seri2 = _df['volume'] <=0
+    seri = seri1 & seri2
+    return seri

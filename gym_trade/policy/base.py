@@ -2,7 +2,8 @@ from abc import ABC, abstractmethod
 
 
 class BasePolicy(ABC):
-    def __init__(self, env):
+    def __init__(self, env, gui=False):
+        self.gui = gui
         self.env = env
 
     @abstractmethod

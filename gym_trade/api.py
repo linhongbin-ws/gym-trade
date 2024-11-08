@@ -6,7 +6,7 @@ import pandas as pd
 from tqdm import tqdm
 from copy import deepcopy
 from gym_trade.tool import screen
-
+from datetime import datetime
 
 def get_args():
     parser = argparse.ArgumentParser()
@@ -63,7 +63,7 @@ def make_env(env_config=None, tags=[], seed=0):
     return env, config
 
 
-def screen_daily(daily_hdf, config_screen, return_high=False, symbol_list=[]):
+def screen_daily(daily_hdf, config_screen, return_high=False, symbol_list=[], dates=[]):
     df_meta = pd.read_hdf(daily_hdf)
     symbols = df_meta.columns.levels[0]
     pbar = tqdm(symbols)
@@ -97,28 +97,51 @@ def screen_daily(daily_hdf, config_screen, return_high=False, symbol_list=[]):
         for v in new_column_names:
             # print(v)
             df_results[v] = df[v].to_list()
+        
+        if len(dates)!=0:
+            datess = [datetime.strptime(i, "%Y-%m-%d").date() for i in dates]
+            r = []
+            for i, d in enumerate(df_results['dates']):
+                if d.date() in datess:
+                    r.append(d)
+            df_results['dates'] = r
+
         if df is not None:
             results[symbol] = df_results
 
     return results
 
-def make_policy(policy_name, env):
+def make_policy(policy_name, env, gui=False):
     import importlib
     module_dir = 'gym_trade.policy.'+ policy_name
     module = importlib.import_module(module_dir)
     cls = getattr(module, 'Policy')
-    return cls(env)
+    return cls(env, gui)
 
 
-def backtest(env_tag, policy, minute_path, **kwargs):
+def backtest(env_tag, policy, minute_path, gui, **kwargs):
     env, env_config = make_env(tags=env_tag, seed=0)
+    if gui:
+        from gym_trade.env.wrapper import LightChart_Visualizer
+        env = LightChart_Visualizer(env)
     env.load_stock_list([minute_path])
     obs = env.reset()
 
-    p = make_policy(policy, env)
+    p = make_policy(policy, env, gui)
     p.init_policy(**kwargs)
     done = False
     while not done:
         action = p(obs)
         obs, reward, done, info = env.step(action)
+        if gui:
+            if action==0:
+                env.gui_marker("buy")
+                # print(f"buy at timestep {env.timestep}")
+            if action==1:
+                env.gui_marker("sell")
+                # print(f"sell at timestep {env.timestep}")
+
+    if gui:
+        env.gui_textbox("pnl", "pnl: " + str(env.pnl))
+        env.gui_show()
     return env.pnl

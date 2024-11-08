@@ -7,7 +7,7 @@ default:
     ImageRepresent:
       method: simple
     OBS:
-      direct_map_key: ["position_ratio","open","close","high","low", "timestep","volume"]
+      direct_map_key: ['all']
       image_obs_key: ["rgb"]
       vector_obs_key: ["open", "close","high","low"]
       direct_render_key: ["rgb"]
@@ -16,9 +16,12 @@ default:
       image_resize: [64,64]
       cv_interpolate: "area"
     TA:
-      ma5: {func: ma, key: close, window: 5}
-      break_high: {func: break_high, key: high}
+      # ma5: {func: ma, key: close, window: 5}
+      break_high: {func: break_high, key: close}
       break_high_or: {func: rolling_op, key: break_high, operation: or, window: 1}
+      direction: {func: direction, key: close}
+      break_high_or2: {func: rolling_op, key: direction, operation: or, window: 2}
+      trade_curb: {func: trade_curb}
   embodied_name: GymTradeEnv
   task_name: us_stock
   embodied:
@@ -41,6 +44,6 @@ default:
     new_high:
       period: 52                          
     new_volume_high:
-      period: 52 
+      period: 7 
       
 

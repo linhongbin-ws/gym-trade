@@ -20,6 +20,9 @@ class DiscreteAction(BaseWrapper):
         action = self._dis2con(action)
         return self.env.step(np.array([action]))
     
+    @property
+    def hold_action(self,):
+        return 2
     
     # def get_oracle_action(self):
     #     pass

@@ -27,7 +27,13 @@ class TA(BaseWrapper):
         return obs
     
     def step(self,action):
-        obs, reward, done, info = self.env.step(action)
+        _action = action
+        if 'trade_curb' in self.unwrapped.df:
+            if self.unwrapped.df['trade_curb'].iloc[self.unwrapped.timestep+1]:
+                _action = self.env.hold_action
+
+                
+        obs, reward, done, info = self.env.step(_action)
         obs.update(self._get_obs_from_df())
         return obs, reward, done, info
     
@@ -36,7 +42,7 @@ class TA(BaseWrapper):
         df = self.unwrapped.df
         obs = {}
         for k, v in self._ta_dict.items():
-            obs[k]  = df[k].iloc[self.unwrapped.timestep-1]
+            obs[k]  = df[k].iloc[self.unwrapped.timestep]
             # print(obs[k],self.unwrapped.timestep)
         return obs
 
