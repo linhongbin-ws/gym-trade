@@ -12,8 +12,10 @@ class Policy(BasePolicy):
         self.close_price_buy = None
         self.break_high_prv = True
         self.pnl_prv = 0
+        self.pnl_highest = 0
         self.buycnt = 0
-        self.max_loss = 0.06
+        self.max_buycnt = 10
+        self.max_loss = 0.1
         # self.max_timestep_pnl_drop = 1
         self.trade_curb_exist = False
         self.max_hold_timestep = 100
@@ -66,9 +68,12 @@ class Policy(BasePolicy):
             self.high_close_price_after_buy = np.maximum(obs['close'], self.high_close_price_after_buy)
             h2c = (obs['close'] - self.close_price_buy) / (self.high_close_price_after_buy - self.close_price_buy)
             pnl = (obs['close'] - self.close_price_buy) / self.close_price_buy
+            self.pnl_highest = np.maximum(pnl, self.pnl_highest)
         else:
             h2c = 1
             pnl = 0
+            self.pnl_highest = 0
+            
 
 
        
@@ -77,7 +82,7 @@ class Policy(BasePolicy):
             and self.env.timestep > 0 \
             and obs['close'] > self.calibrate_high_price\
             and self.agg_volume > self.calibrate_volume_high\
-            and self.buycnt <1\
+            and self.buycnt <self.max_buycnt\
             and  self.env.timestep >= self.start_trade_timestep  \
             and not self.trade_curb_exist\
                 :
@@ -86,9 +91,10 @@ class Policy(BasePolicy):
 
         elif ((obs['timestep']>=388) 
             #   or ((pnl-self.pnl_prv) < (-self.max_loss * self.max_timestep_pnl_drop))
-              or (pnl < -self.max_loss)
+              or ( (self.pnl_highest-pnl) // self.max_loss -  (self.pnl_highest-self.pnl_prv) // self.max_loss) >= 1
               or ((pnl > 0.1) and (h2c<0.5))
             #   or (self.hold_timestep_cnt >= self.max_hold_timestep)
+                or not obs["break_high_or10"] 
                 or (self.trade_curb_exist)
               ) \
              and obs["position_ratio"]>0.1:

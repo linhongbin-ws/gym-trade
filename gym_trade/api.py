@@ -103,8 +103,8 @@ def screen_daily(daily_hdf, config_screen, return_high=False, symbol_list=[], da
             r = []
             for i, d in enumerate(df_results['dates']):
                 if d.date() in datess:
-                    r.append(d)
-            df_results['dates'] = r
+                    r.append(i)
+            df_results = {k1: [v1[_r] for _r in r] for k1, v1 in df_results.items()}
 
         if df is not None:
             results[symbol] = df_results
@@ -130,9 +130,16 @@ def backtest(env_tag, policy, minute_path, gui, **kwargs):
     p = make_policy(policy, env, gui)
     p.init_policy(**kwargs)
     done = False
+    stick_action = False
     while not done:
         action = p(obs)
-        obs, reward, done, info = env.step(action)
+        if action is None:
+            if gui:
+                stick_action = True
+            else:
+                break
+    
+        obs, reward, done, info = env.step(action if not stick_action else 2)
         if gui:
             if action==0:
                 env.gui_marker("buy")

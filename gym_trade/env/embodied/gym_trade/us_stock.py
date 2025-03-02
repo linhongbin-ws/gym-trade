@@ -198,6 +198,8 @@ class US_Stock_Env(gym.Env):
             platform = 0.005
             min_platform = 1
             return np.clip(pos*commision,min_commision,None) + np.clip(pos*platform,min_platform,None) 
+        elif self._commission_type == "free":
+            return 0
         else:
             raise NotImplementedError
 

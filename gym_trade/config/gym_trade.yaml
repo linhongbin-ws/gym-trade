@@ -18,9 +18,9 @@ default:
     TA:
       # ma5: {func: ma, key: close, window: 5}
       break_high: {func: break_high, key: close}
-      break_high_or: {func: rolling_op, key: break_high, operation: or, window: 1}
+      break_high_or: {func: rolling_op, key: break_high, operation: or, window: 5}
       direction: {func: direction, key: close}
-      break_high_or2: {func: rolling_op, key: direction, operation: or, window: 2}
+      break_high_or10: {func: rolling_op, key: break_high, operation: or, window: 2}
       trade_curb: {func: trade_curb}
   embodied_name: GymTradeEnv
   task_name: us_stock
@@ -29,7 +29,7 @@ default:
       us_stock:
         csv_root_dir: ""
         init_balance: 1e6
-        commission_type: "futu"
+        commission_type: "free"
         reward_type: "pnl_delta_sparse"
         obs_keys: ["position_ratio","open","close","high","low","timestep","volume"]
         stat_keys:
@@ -37,13 +37,30 @@ default:
         action_min_thres: 0.1
   
   screen:
-    pipeline: [price_limit, new_high, new_volume_high]
-    price_limit:
-      upper_limit: 100 
-      lower_limit: 5
+    pipeline: [new_high, new_volume_high]
+    # price_limit:
+    #   upper_limit: 100 
+    #   lower_limit: 5
     new_high:
       period: 52                          
     new_volume_high:
       period: 7 
-      
+
+breakout5:
+  wrapper:
+    TA:
+      break_high: {func: break_high, key: high}
+
+breakout6:
+  wrapper:
+    TA:
+      break_high: {func: break_high, key: close}
+      break_high_or: {func: rolling_op, key: break_high, operation: or, window: 10}
+
+breakout7:
+  wrapper:
+    TA:
+      break_high: {func: break_high, key: close}
+      break_high_or: {func: rolling_op, key: break_high, operation: or, window: 8}
+
 

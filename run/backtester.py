@@ -19,6 +19,8 @@ parser.add_argument('--symbol', type=str, nargs='+', default=[])
 parser.add_argument('--savedir', type=str, default='./data/backtest')
 parser.add_argument('--gui', action="store_true")
 parser.add_argument('--date', type=str, nargs='+', default=[])
+parser.add_argument('--csv', type=str, default="")
+parser.add_argument('--csv-num', type=int, default=6)
 in_args = parser.parse_args()
 
 env, env_config = make_env(tags=in_args.env_tag, seed=0)
@@ -28,13 +30,40 @@ is_parallel = in_args.worker > 1
 gui = in_args.gui
 
 
-
-# screen
-stock_dates = screen_daily(hdf, 
-                           env_config.screen,
-                            symbol_list=in_args.symbol,
-                            dates=in_args.date
-                           )
+if in_args.csv =="":
+    # screen
+    stock_dates = screen_daily(hdf, 
+                            env_config.screen,
+                                symbol_list=in_args.symbol,
+                                dates=in_args.date
+                            )
+else:
+    _df = pd.read_csv(in_args.csv)
+    _df.dropna(inplace=True)
+    stock_dates = None
+    if in_args.csv_num>0:
+        _df = _df[:in_args.csv_num]
+    elif in_args.csv_num<0:
+        _df = _df.iloc[::-1]
+        _df = _df[:-in_args.csv_num]
+    for i in _df.index:
+        file = _df['file'][i]
+        _date = file[:10]
+        _symbol = file[11:]
+        sd = screen_daily(hdf, 
+                        env_config.screen,
+                            symbol_list=[_symbol],
+                            dates=[_date]
+                        )
+        if stock_dates is None:
+            stock_dates = sd
+        else:
+            for _k, _v in sd.items():
+                if _k in stock_dates:
+                    stock_dates[_k] = {_i: stock_dates[_k][_i]+sd[_k][_i] for _i, _j in _v}
+                else:
+                    stock_dates[_k] = sd[_k]
+    
 
 cnt = 0
 for k,v in stock_dates.items():
@@ -83,17 +112,19 @@ else:
             file_name = Path(input['minute_path']).stem
             return [pnl, file_name]
             # print(csv_file)
-    p = parallel(worker_type="process")
+    p = parallel(worker_type="process", worker_num=in_args.worker)
     pnl_results = p.run(csv_list)
     pnl_results = [v for v in pnl_results if v is not None]
 
 df = pd.DataFrame(pnl_results,columns =['pnl', 'file'])
+df.dropna(inplace=True)
+df = df[df['pnl'] != 0]
 df.sort_values(by=['pnl'],inplace=True)
 print(df)
 print("mean pnl (%):",df['pnl'].mean(),"std pnl (%):",df['pnl'].std(),)
 savedir = Path(in_args.savedir)
 savedir.mkdir(parents=True, exist_ok=True)
-file_name = savedir / (datetime.now().strftime("%Y-%d-%m-%H-%M-%S")+ ".csv")
+file_name = savedir / (datetime.now().strftime("%Y-%m-%d-%H-%M-%S")+ ".csv")
 
 df.to_csv(str(file_name))
 
