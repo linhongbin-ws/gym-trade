@@ -1,23 +1,13 @@
 from gym_trade.env.wrapper.base import BaseWrapper
 import numpy as np
-import gym
 from gym_trade.tool import ta
+
 class TA(BaseWrapper):
     def __init__(self, env,
+                 ta_dict_list,
                  **kwargs):
         super().__init__(env)
-        # print(ta_list)
-        self._ta_dict = {}
-        for k,v in kwargs.items():
-            dot = k.find(".")
-            ta_name = k[:dot]
-            arg_name = k[dot+1:]
-            if not (ta_name in self._ta_dict):
-                self._ta_dict[ta_name] = {"func": None, "args": {}}
-            if arg_name == "func":
-                self._ta_dict[ta_name][arg_name] = v
-            else:
-                self._ta_dict[ta_name]["args"][arg_name] = v
+        self._ta_dict_list = ta_dict_list
 
 
     def reset(self):
@@ -28,11 +18,9 @@ class TA(BaseWrapper):
     
     def step(self,action):
         _action = action
-        if 'trade_curb' in self.unwrapped.df:
-            if self.unwrapped.df['trade_curb'].iloc[self.unwrapped.timestep+1]:
-                _action = self.env.hold_action
-
-                
+        # if 'trade_curb' in self.unwrapped.df:
+        #     if self.unwrapped.df['trade_curb'].iloc[self.unwrapped.timestep+1]:
+        #         _action = self.env.hold_action                
         obs, reward, done, info = self.env.step(_action)
         obs.update(self._get_obs_from_df())
         return obs, reward, done, info
@@ -41,22 +29,35 @@ class TA(BaseWrapper):
     def _get_obs_from_df(self):
         df = self.unwrapped.df
         obs = {}
-        for k, v in self._ta_dict.items():
-            obs[k]  = df[k].iloc[self.unwrapped.timestep]
+        for v in self._ta_col_names:
+            obs[v]  = df[v].iloc[self.unwrapped.timestep]
             # print(obs[k],self.unwrapped.timestep)
         return obs
 
 
     def _create_ta(self):
-        df = self.unwrapped.df
-        obs = {}
-        for k, v in self._ta_dict.items():
-            _f_name = v["func"]
-            _call = getattr(ta, _f_name)
-            _args = v["args"]
-            _args['df'] = df
-            df[k] = _call(**_args)
+        df = self.unwrapped.df.copy()
         
+        ta_col_names = []
+        for ta_dict in self._ta_dict_list:
+            f_name = None
+            args = {'df':df}
+            for k,v in ta_dict.items():
+                if k == 'func':
+                    f_name = v
+                else:
+                    args[k] = v
+            assert f_name != None
+
+
+            call = getattr(ta, f_name)
+            ret = call(**args)
+
+            for ret_k, ret_v in ret.items():
+                df[ret_k] = ret_v
+                ta_col_names.append(ret_k)
+
+        self._ta_col_names = ta_col_names
         self.unwrapped.df = df
 
 

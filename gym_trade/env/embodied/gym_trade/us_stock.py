@@ -1,21 +1,18 @@
 import gym
-from gym import spaces
 import pandas as pd
 import numpy as np
 from os.path import isfile
-import random
 from typing import List, Union
 import pathlib
 
 ## gym_datatrade package
 from gym_trade.tool.preprocess import fill_missing_frame, standardlize_df
-from gym_trade.tool import ta
-from gym_trade.tool.common import get_csv_dir
+# from gym_trade.tool.common import get_csv_dir
 
 
 class US_Stock_Env(gym.Env):
     def __init__(self, 
-                    csv_root_dir='', 
+                    df_list, # list of csv file names or list of df 
                     init_balance=100,
                     commission_type = "futu", 
                     reward_type='pnl_delta_sparse',
@@ -26,7 +23,6 @@ class US_Stock_Env(gym.Env):
                     interval="minute",
                     **kwargs,
                     ):
-        _csv_root_dir = str(pathlib.Path( __file__ ).absolute().parent.parent.parent.parent / "asset" / "mini_minute_data")  if csv_root_dir=='' else  csv_root_dir
         self._init_balance = init_balance
         self._commission_type = commission_type
         self._reward_type = reward_type
@@ -38,7 +34,8 @@ class US_Stock_Env(gym.Env):
         self._interval = interval
         assert self._interval in ["day", "minute"]
         self.seed = 0
-        self. _update_csv_dir(_csv_root_dir) # load csv directory
+        # self. _update_csv_dir(_csv_root_dir) # load csv directory
+        self._df_list = df_list
         self._init_var() # init variables
 
     #====== gym api ========
@@ -48,6 +45,9 @@ class US_Stock_Env(gym.Env):
         return obs
     
     def step(self, action):
+        # action clip to -1 to 1
+        action = np.clip(action,-1,1)
+
         self._timestep +=1
         assert self._timestep <=self._df.shape[0] - 1
         self._update_stats(action) 
@@ -87,6 +87,10 @@ class US_Stock_Env(gym.Env):
     def seed(self, seed):
         self._seed = seed
         self._rng_csv_idx = np.random.RandomState(seed)
+
+    @property
+    def action_space(self):
+        return gym.spaces.Box(-1,1)
     
     #====== other ==============
     def _update_stats(self, action):
@@ -135,12 +139,12 @@ class US_Stock_Env(gym.Env):
     def _update_csv_dir(self, dir_or_filelist):
         if isinstance(dir_or_filelist, str): 
             # extract csv file path
-            self._csv_list = get_csv_dir(dir_or_filelist)
+            self._df_list = get_csv_dir(dir_or_filelist)
         elif isinstance(dir_or_filelist, list):    
-            self._csv_list = dir_or_filelist
+            self._df_list = dir_or_filelist
         else:
             raise NotImplementedError
-        assert len(self._csv_list)!=0, f"data_dir: {dir} got empty csv data files"
+        assert len(self._df_list)!=0, f"data_dir: {dir} got empty csv data files"
 
     def _fsm(self):
         done = self.timestep >= (len(self._df.index)-1) 
@@ -148,14 +152,17 @@ class US_Stock_Env(gym.Env):
     
     def _init_var(self):
         # init
-        self._csv_idx = 0 if len(self._csv_list)==1 else self._rng_csv_idx.randint(0, len(self._csv_list)-1) 
+        self._csv_idx = 0 if len(self._df_list)==1 else self._rng_csv_idx.randint(0, len(self._df_list)-1) 
         self._timestep = 0
 
         # read csv
-        csv_file = self._csv_list[self._csv_idx]
-        self._csv_name = csv_file
-        # assert isfile(csv_file), f"{csv_file} is not a file"
-        _df = pd.read_csv(csv_file)
+        csv_file = self._df_list[self._csv_idx]
+        if isinstance(csv_file, str):
+            self._csv_name = csv_file
+            # assert isfile(csv_file), f"{csv_file} is not a file"
+            _df = pd.read_csv(csv_file)
+        else:
+            _df = csv_file
         assert _df.shape[0]>0, f"{csv_file} got empty df data"
 
         #proccess
