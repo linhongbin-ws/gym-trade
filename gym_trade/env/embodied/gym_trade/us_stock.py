@@ -21,6 +21,7 @@ class US_Stock_Env(gym.Env):
                     action_min_thres=0.1,
                     fix_buy_position=True,
                     interval="minute",
+                    action_on_prv_close=True,
                     **kwargs,
                     ):
         self._init_balance = init_balance
@@ -32,6 +33,7 @@ class US_Stock_Env(gym.Env):
         self._action_min_thres = action_min_thres
         self._fix_buy_position = fix_buy_position
         self._interval = interval
+        self._action_on_prv_close = action_on_prv_close
         assert self._interval in ["day", "minute"]
         self.seed = 0
         # self. _update_csv_dir(_csv_root_dir) # load csv directory
@@ -100,17 +102,21 @@ class US_Stock_Env(gym.Env):
         _cash_prv = self._df['stat_cash'].iloc[self._timestep-1]
         _pos_prv = self._df['stat_pos'].iloc[self._timestep-1]
 
+        if self._action_on_prv_close:
+            action_price = self._df['close'].iloc[self._timestep-1]
+        else:
+            action_price = _open 
         # buy
-        if action>=self._action_min_thres: 
+        if action>=self._action_min_thres:
             _buy_cash = _cash_prv * action  # proportion to action value, 0.8 to save some money for commision
-            _buy_pos = _buy_cash // _open # buy at open point
-            _buy_cash = _buy_pos * _open
+            _buy_pos = _buy_cash // action_price # buy at open point
+            _buy_cash = _buy_pos * action_price
             self._df['stat_cash'].iloc[self._timestep] = _cash_prv - _buy_cash - self._get_commision(_buy_pos)
             self._df['stat_pos'].iloc[self._timestep] = _pos_prv + _buy_pos 
         
         # sell
         elif action<=-self._action_min_thres:
-            _sell_price = _open
+            _sell_price = action_price
             _sell_pos = np.floor(_pos_prv * np.abs(action))
             _sell_cash = _sell_pos * _sell_price
             self._df['stat_cash'].iloc[self._timestep] = _cash_prv + _sell_cash - self._get_commision(_sell_pos) 
