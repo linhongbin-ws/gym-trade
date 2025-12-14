@@ -1,3 +1,3 @@
-[submodule "ext/dreamerv2"]
-	path = ext/dreamerv2
-	url = https://github.com/linhongbin-ws/dreamerv2.git
+[submodule "3rdparty/Technical-Analysis-Indicators---Pandas/"]
+	path = 3rdparty/Technical-Analysis-Indicators---Pandas/
+	url = git@github.com:Data-Analisis/Technical-Analysis-Indicators---Pandas.git

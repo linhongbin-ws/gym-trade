@@ -10,10 +10,6 @@ import argparse
 
 # from stock_trader.strategy.tool.utility import load_json, PACKAGE_CONFIG_PATH, CURRENT_SYS
 
-import os
-proxy = 'http://127.0.0.1:7897'
-os.environ['HTTP_PROXY'] = proxy 
-os.environ['HTTPS_PROXY'] = proxy 
 
 import warnings
 warnings.simplefilter(action='ignore', category=FutureWarning)
@@ -60,7 +56,6 @@ def request(symbol, start_date:str, end_date:str, save_root_dir:str):
         auto_adjust = True,
         prepost = True,
         threads = False,
-        proxy = None,
         progress = False,
         ignore_tz=True,
         # show_errors=False
