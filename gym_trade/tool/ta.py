@@ -10,7 +10,7 @@ def ma(df: pd.DataFrame, key:str,window:int)->pd.Series:
     assert window>0 and key in df.columns
     # feature_name = 'ma_'+key+'_'+str(window)
     seri = _df[key].rolling(window=window).mean()
-    return {'value': seri}
+    return seri
 
 def break_high(df: pd.DataFrame, key, ):
     _df = df.copy()

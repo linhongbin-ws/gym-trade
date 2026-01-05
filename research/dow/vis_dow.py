@@ -56,8 +56,7 @@ def main(cfg: DictConfig) -> None:
     chart = Chart(toolbox=True,inner_width=1)
     chart.candle_style(down_color='#00ff55', up_color='#ed4807')
     chart.set(df)
-
-    random_color = lambda : f'rgba({random.randint(200, 255)}, {random.randint(200, 255)}, {random.randint(200, 255)}, 0.9)'
+    random_color = lambda : f'rgba({random.randint(100, 255)}, {random.randint(100, 255)}, {random.randint(100, 255)}, 0.9)'
 
     ta_dict = OmegaConf.to_container(
             cfg.ta,
@@ -76,12 +75,13 @@ def main(cfg: DictConfig) -> None:
         line_df = pd.DataFrame({
             'time': df.index,
             k: df[k]
-        }).dropna()
-        line = chart.create_line(k, color = random_color,)
+        })
+        line_df = line_df.dropna()
+        line = chart.create_line(k, color = random_color(),)
+        chart.legend(True)
         line.set(line_df)
         
 
-    chart.legend(True)
 
     chart.show(block=True)
     return None

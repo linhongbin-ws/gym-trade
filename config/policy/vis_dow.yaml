@@ -12,4 +12,4 @@ policy:
 
 
 # ✅ 这个策略需要哪些指标（跨文件挑）
-ta_select: [ma10]
+ta_select: [ma10, ma60, ma120, ma240]
