@@ -1,7 +1,6 @@
 import pandas as pd
 from os.path import isfile
 from gym_trade.tool.preprocess import fill_missing_frame, standardlize_df
-import pandas_ta as ta
 import numpy as np
 
 

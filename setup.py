@@ -1,24 +1,37 @@
 from setuptools import setup, find_packages
 
-setup(name='gym_trade', 
-      version='1.0',
-    install_requires=[
-        'gym<=0.23.1', 
-        'opencv-python', # <=4.1 , avoid conflit with pyqt5, https://blog.csdn.net/Torch_HXM/article/details/123807278
-        'ruamel.yaml<=0.17',
-        'pandas',
-        'numpy',
-        'matplotlib',
-        'mplfinance',
-        'yfinance',
-        'tqdm',
-        'pandas_ta',
-        'lightweight-charts',
-        'pynput',
-        'pyqt',
-        'PyGObject==3.50.0',
-        'pywebview[qt]',
-        'pandas-market-calendars==4.5',
-        "pytz",
-        ], 
-      packages=find_packages())
+install_requires = [
+    'gym<=0.23.1',
+    'opencv-python',
+    'ruamel.yaml<=0.17',
+    'pandas',
+    'numpy',
+    'matplotlib',
+    'mplfinance',
+    'yfinance',
+    'tqdm',
+    'hydra-core',
+
+    # ⬇️ SSH Git dependency（正确写法）
+    # 'pandas-ta @ git+ssh://git@github.com/Data-Analisis/Technical-Analysis-Indicators---Pandas.git',
+
+    'lightweight-charts',
+    'pynput',
+    'pandas-market-calendars==4.5',
+    'pytz',
+]
+
+platform_deps = [
+    'PyGObject==3.50.0; platform_system=="Linux"',
+    'pyqt; platform_system=="Linux"',
+    'pywebview[qt]; platform_system=="Linux"',
+    'pywebview; platform_system=="Darwin"',
+]
+
+setup(
+    name='gym_trade',
+    version='1.0',
+    python_requires='>=3.9,<3.14',
+    install_requires=install_requires + platform_deps,
+    packages=find_packages(),
+)
