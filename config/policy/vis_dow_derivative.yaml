@@ -15,4 +15,5 @@ policy:
 # ✅ 这个策略需要哪些指标（跨文件挑）
 ta_select: [ma240,rlf_ma240_60]
 
-vis_select: [ma240, ]
+mainchart: [ma240, ]
+subchart: [rlf_ma240_60@slope, rlf_ma240_60@intercept, 'rlf_ma240_60@r2','rlf_ma240_60@t',rlf_ma240_60@slope_pct_annual]

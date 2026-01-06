@@ -53,7 +53,8 @@ def main(cfg: DictConfig) -> None:
         df.to_csv(os.path.join(cfg.network.cache_dir, 'dow.csv'))
 
     df = standardlize_df(df)
-    chart = Chart(toolbox=True,inner_width=1)
+    main_chart_width = 0.6
+    chart = Chart(toolbox=True,inner_width=1,inner_height=main_chart_width)
     chart.candle_style(down_color='#00ff55', up_color='#ed4807')
     chart.set(df)
     random_color = lambda : f'rgba({random.randint(100, 255)}, {random.randint(100, 255)}, {random.randint(100, 255)}, 0.9)'
@@ -75,11 +76,12 @@ def main(cfg: DictConfig) -> None:
         if isinstance(results, pd.DataFrame):
             for col in results.columns:
                 df[k+'@'+col] = results[col]
-            assert False, df.columns
         elif isinstance(results, pd.Series):
             df[k] = results
         else:
             raise NotImplementedError(f"Unsupported return type: {type(results)}")
+
+    for k in cfg.mainchart:
         line_df = pd.DataFrame({
             'time': df.index,
             k: df[k]
@@ -88,10 +90,21 @@ def main(cfg: DictConfig) -> None:
         line = chart.create_line(k, color = random_color(),)
         chart.legend(True)
         line.set(line_df)
+    
+    for k in cfg.subchart:
+        subchart = chart.create_subchart(position='left', width=1, height=(1-main_chart_width)/len(cfg.subchart),sync=True)
+        subchart.legend(True)
+        line = subchart.create_line(k)
+        line_df = pd.DataFrame({
+            'time': df.index,
+            k: df[k]
+        })
+        # line_df = line_df.dropna()
+        line.set(line_df)
         
 
 
-    # chart.show(block=True)
+    chart.show(block=True)
     return None
 
 if __name__ ==  '__main__':
