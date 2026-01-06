@@ -1,0 +1,18 @@
+# @package _global_
+
+defaults:
+  - /ta@ta_ema: ema
+  - /ta@ta_ma: ma
+  - /ta@ta_rolling_linreg_features: rolling_linreg_features
+  - _self_
+
+ta: {}   # ✅ 预声明，让 struct 模式允许赋值
+
+policy:
+  name: vis_dow
+
+
+# ✅ 这个策略需要哪些指标（跨文件挑）
+ta_select: [ma240,rlf_ma240_60]
+
+vis_select: [ma240, ]

@@ -6,3 +6,4 @@ network:
   proxy: http://127.0.0.1:7897
   use_cache: false
   cache_dir: /tmp/gym_trade
+
