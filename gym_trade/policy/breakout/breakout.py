@@ -1,6 +1,7 @@
 from gym_trade.policy.base import BasePolicy
+from gym_trade.policy.registry import register_policy
 
-
+@register_policy
 class Policy(BasePolicy):
     def init_policy(self, **kwargs):
         Prv_High, Prv_Volme_High, Close, = kwargs['Prv_High'], kwargs['Prv_Volme_High'], kwargs['Close']

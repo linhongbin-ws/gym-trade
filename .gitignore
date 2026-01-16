@@ -1,7 +1,7 @@
 **.egg-info/
 **__pycache__
 log/
-data/
+./data/
 **.sh
 .**/
 .vscode/

@@ -1,2 +1,0 @@
-rlf_ma240_60: {func: rolling_linreg_features, key: ma240, window: 60} 
-rlf_ma240_80: {func: rolling_linreg_features, key: ma240, window: 80} 

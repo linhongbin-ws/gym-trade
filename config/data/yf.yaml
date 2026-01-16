@@ -1,0 +1,6 @@
+name: yfinance
+cache_dir: /tmp/gym_trade
+interval: 1d
+symbol: ^DJI
+start: null
+end: null

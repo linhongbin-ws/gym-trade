@@ -1,0 +1,17 @@
+ema5: {func: ema, key: close, window: 5}
+ema10: {func: ema, key: close, window: 10}
+ema20: {func: ema, key: close, window: 20}
+
+
+
+ma5: {func: ma, key: close, window: 5}
+ma10: {func: ma, key: close, window: 10}
+ma20: {func: ma, key: close, window: 20}
+ma60: {func: ma, key: close, window: 60}
+ma120: {func: ma, key: close, window: 120}
+ma240: {func: ma, key: close, window: 240}
+
+
+
+rlf_ma240_60: {func: rolling_linreg_features, key: ma240, window: 60} 
+rlf_ma240_80: {func: rolling_linreg_features, key: ma240, window: 80} 

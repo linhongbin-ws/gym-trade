@@ -1,0 +1,10 @@
+name: bt
+start: null
+end: null
+init_balance: 1e6
+commission_type:  free
+reward_type: pnl_delta_sparse
+obs_keys: ["position_ratio","open","close","high","low"]
+stat_keys: ['stat_pos', 'position_ratio', 'stat_pnl','stat_balance','stat_cash',]
+action_min_thres: 0.1
+fix_buy_position: true
