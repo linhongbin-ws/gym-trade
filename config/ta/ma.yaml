@@ -1,0 +1,7 @@
+
+ma5: {func: ma, key: close, window: 5}
+ma10: {func: ma, key: close, window: 10}
+ma20: {func: ma, key: close, window: 20}
+ma60: {func: ma, key: close, window: 60}
+ma120: {func: ma, key: close, window: 120}
+ma240: {func: ma, key: close, window: 240}

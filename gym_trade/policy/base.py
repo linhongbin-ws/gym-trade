@@ -2,9 +2,8 @@ from abc import ABC, abstractmethod
 
 
 class BasePolicy(ABC):
-    def __init__(self, env, gui=False):
+    def __init__(self, gui=False):
         self.gui = gui
-        self.env = env
 
     @abstractmethod
     def __call__(self, obs, **kwargs):

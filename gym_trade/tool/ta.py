@@ -2,6 +2,33 @@ import pandas as pd
 from os.path import isfile
 from gym_trade.tool.preprocess import fill_missing_frame, standardlize_df
 import numpy as np
+from typing import List 
+from gym_trade.tool import ta
+
+
+
+def make_ta(df: pd.DataFrame, ta_dict_dict: dict[str, dict]) -> pd.DataFrame: 
+    unfinish_dict = {}
+    for ta_name, ta_arg_dict in ta_dict_dict.items():
+        func = ta_arg_dict['func']
+        call = globals()[func]
+        args = {k: v for k, v in ta_arg_dict.items() if k != 'func' }
+        try:
+            ta_results = call(df, **args)
+        except:
+            unfinish_dict[ta_name] = ta_arg_dict
+            continue
+        if isinstance(ta_results, pd.Series):
+            name = ta_name
+            df[name] = ta_results 
+        elif isinstance(ta_results, pd.DataFrame):
+            for k in ta_results.columns:
+                name = ta_name + '@' + k
+                df[name] = ta_results[k]
+        else:
+            raise NotImplementedError(f"Unsupported return type: {type(ta_results)}") 
+    print(df.columns)
+    return df, unfinish_dict
 
 def ma(df: pd.DataFrame, key:str,window:int) -> pd.Series:
     series = df[key].copy()

@@ -1,67 +1,75 @@
 from abc import ABC, abstractmethod
-class BaseEnv(ABC):
-    def __init__(self, client):
-        self.client = client
-        
-    @property
-    def unwrapped(self):
-        return self
-    
-    def __del__(self):
-    # cv2.destroyAllWindows()
-        del self.client
-    
-    @property
-    def is_wrapper(self):
-        return False
-    
+import gym
+from gym import spaces
+from gym.utils import seeding
+
+class BaseEnv(gym.Env, ABC):
+    """
+    Base environment for Gym < 0.26
+    """
+
+    metadata = {"render.modes": []}
+
+    def __init__(self):
+        super().__init__()
+        self._seed = None
+
+    # ---------- Core Gym API ----------
 
     @abstractmethod
     def reset(self):
-        return self.client.reset()
+        """
+        Returns:
+            obs
+        """
+        raise NotImplementedError
 
     @abstractmethod
-    def step(self,action):
-        obs, reward, done, info = self.client.step(action)
-        return obs, reward, done, info
+    def step(self, action):
+        """
+        Returns:
+            obs, reward, done, info
+        """
+        raise NotImplementedError
 
-    @abstractmethod
-    def render(self, **kwargs): #['human', 'rgb_array', 'mask_array']
-        return self.client.render(mode=mode)
-    
-    @abstractmethod
-    def get_oracle_action(self,obs):
-        return self.client.get_oracle_action(obs)
-
+    # ---------- Spaces ----------
 
     @property
     @abstractmethod
-    def action_space(self):
-        return self.client.action_space
+    def action_space(self) -> spaces.Space:
+        raise NotImplementedError
 
-    
     @property
     @abstractmethod
-    def observation_space(self):
-        return self.client.observation_space
+    def observation_space(self) -> spaces.Space:
+        raise NotImplementedError
 
-    
+    # ---------- Seeding (old Gym style) ----------
+
+    def seed(self, seed=None):
+        # Base seed
+        self.env_rng, seed = seeding.np_random(seed)
+
+        # Derive deterministic sub-seeds
+        obs_seed = seed + 1
+        action_seed = seed + 2
+
+        self.obs_rng, _ = seeding.np_random(obs_seed)
+        self.action_rng, _ = seeding.np_random(action_seed)
+
+        return [seed, obs_seed, action_seed]
+
+    # ---------- Optional helpers ----------
+
     @property
-    @abstractmethod
-    def seed(self):
-        return self.client.seed
+    def t(self):
+        """Current timestep (optional)"""
+        return None
 
-    
     @property
-    @abstractmethod
-    def timestep(self):
-        return self.client.timestep
+    def unwrapped(self):
+        return self
 
-    
-    @seed.setter
-    @abstractmethod
-    def seed(self, seed):
-        self.client.seed = seed
-
-
-        
+    @property
+    def is_wrapper(self):
+        return False

@@ -1,7 +1,10 @@
 defaults:
   - mode: vis
-  - ta: gym_trade_ta
+  - ta@ta_ma: ma
+  - ta@ta_ema: ema
+  - ta@ta_rlf: rlf
   - data: yf
+  - policy: dummy
 
 general:
   proxy: http://127.0.0.1:7897

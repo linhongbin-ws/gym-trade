@@ -4,3 +4,4 @@ interval: 1d
 symbol: ^DJI
 start: null
 end: null
+use_cache: true

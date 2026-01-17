@@ -169,7 +169,7 @@ class US_Stock_Env(gym.Env):
             _df = pd.read_csv(csv_file)
         else:
             _df = csv_file
-        assert _df.shape[0]>0, f"{csv_file} got empty df data"
+        assert _df.shape[0]>0, f"{_df} {csv_file} got empty df data"
 
         #proccess
 

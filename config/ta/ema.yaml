@@ -1,0 +1,5 @@
+ema5: {func: ema, key: close, window: 5}
+ema10: {func: ema, key: close, window: 10}
+ema20: {func: ema, key: close, window: 20}
+
+
