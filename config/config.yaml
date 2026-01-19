@@ -5,6 +5,7 @@ defaults:
   - ta@ta_rlf: rlf
   - data: yf
   - policy: dummy
+  - env: paper_trade 
 
 general:
   proxy: http://127.0.0.1:7897

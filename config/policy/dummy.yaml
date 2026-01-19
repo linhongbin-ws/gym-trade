@@ -1,1 +1,2 @@
 name: dummy
+obs_keys: ["dash@pos","open","close","high","low"] 

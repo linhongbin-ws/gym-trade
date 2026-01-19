@@ -110,7 +110,7 @@ def create_feature_df(df: pd.DataFrame, feature_names: List)->pd.DataFrame:
 
     return df_feature
 
-def standardlize_df(df: pd.DataFrame)-> pd.DataFrame:
+def standardlize_df(df: pd.DataFrame, interval: str = "1d" )-> pd.DataFrame:
     """ standardlize dataframe
 
     example:
@@ -137,6 +137,10 @@ def standardlize_df(df: pd.DataFrame)-> pd.DataFrame:
     # print(type(_df.index.values[0]))
     assert isinstance(_df.index.values[0], (np.datetime64, datetime)), type(_df.index.values[0])
     _df.sort_index(inplace=True)
+
+    if interval == "1m":
+        _df = fill_missing_frame(_df) 
+        
 
     return _df
 

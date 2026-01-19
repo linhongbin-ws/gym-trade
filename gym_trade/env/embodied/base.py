@@ -10,6 +10,7 @@ class BaseEnv(gym.Env, ABC):
 
     metadata = {"render.modes": []}
 
+    @abstractmethod
     def __init__(self):
         super().__init__()
         self._seed = None

@@ -4,41 +4,68 @@ from gym_trade.tool.preprocess import fill_missing_frame, standardlize_df
 import numpy as np
 from typing import List 
 from gym_trade.tool import ta
+from copy import deepcopy
+import traceback
 
+def make_ta(df: pd.DataFrame, ta_dict_dict: dict[str, dict], col_range_key: dict| None = None,
+         debug: bool= False) -> pd.DataFrame: 
 
+    # input df will have columns of ['date', 'close', 'high', 'low', 'open', 'volume']
+    if col_range_key is None:
+        col_range_key = {'close': [0, np.inf], 
+                        'high': [0, np.inf],  
+                        'low': [0, np.inf],  
+                        'open': [0, np.inf],  
+                        'volume': [0, np.inf], }
+        
 
-def make_ta(df: pd.DataFrame, ta_dict_dict: dict[str, dict]) -> pd.DataFrame: 
     unfinish_dict = {}
     for ta_name, ta_arg_dict in ta_dict_dict.items():
         func = ta_arg_dict['func']
         call = globals()[func]
         args = {k: v for k, v in ta_arg_dict.items() if k != 'func' }
         try:
-            ta_results = call(df, **args)
-        except:
+            args['key_range'] = col_range_key[args['key']]
+            ta_results, ta_ranges = call(df, **args)
+        except Exception as e:
+            if debug:
+                traceback.print_exc()
             unfinish_dict[ta_name] = ta_arg_dict
             continue
-        if isinstance(ta_results, pd.Series):
-            name = ta_name
-            df[name] = ta_results 
-        elif isinstance(ta_results, pd.DataFrame):
+        if isinstance(ta_results, pd.DataFrame):
             for k in ta_results.columns:
                 name = ta_name + '@' + k
                 df[name] = ta_results[k]
+                col_range_key[name] = ta_ranges[k]
         else:
             raise NotImplementedError(f"Unsupported return type: {type(ta_results)}") 
-    print(df.columns)
-    return df, unfinish_dict
+    return df, col_range_key, unfinish_dict, 
 
-def ma(df: pd.DataFrame, key:str,window:int) -> pd.Series:
-    series = df[key].copy()
-    return series.rolling(window, min_periods=window).mean()
 
 def _rolling_conv(y: np.ndarray, w: np.ndarray) -> np.ndarray:
     # convolution aligned to "window ends": result length = len(y) - len(w) + 1
     return np.convolve(y, w[::-1], mode="valid")
 
-def rolling_linreg_features(df: pd.DataFrame, key:str, window: int) -> pd.DataFrame:
+def range_mapping(key_range: List[float], map_type: str = "identity"):
+    assert len(key_range) == 2 and key_range[0] < key_range[1], f"{key_range} not eligible range"
+
+    if map_type == "identity":
+        out_range = deepcopy(key_range)
+    else:
+        raise NotImplementedError
+    return out_range
+
+
+##====================TA s============================
+
+def ma(df: pd.DataFrame, key:str, key_range: List[float],  window:int) -> pd.Series:
+    series = df[key].copy()
+    out = {"value": series.rolling(window, min_periods=window).mean()}
+    out_range = {"value": range_mapping(key_range)}
+    return pd.DataFrame(out, index = series.index), out_range
+
+
+def rolling_linreg_features(df: pd.DataFrame, key:str, key_range: List[float], window: int) -> pd.DataFrame:
     """
     Rolling OLS on fixed x = 0..window-1.
     Returns slope, intercept, r2, tstat, slope_pct_annual (annualized slope / level).
@@ -113,20 +140,34 @@ def rolling_linreg_features(df: pd.DataFrame, key:str, window: int) -> pd.DataFr
     out["t"][idx] = tstat
     out["slope_pct_annual"][idx] = slope_pct_annual
 
-    return pd.DataFrame(out, index=series.index)
+    out_range = {"slope": [-np.inf,np.inf ],
+                "intercept": [-np.inf,np.inf ],
+                "r2": [0,1],
+                "t":  [-np.inf,np.inf ],
+                "slope_pct_annual": [-np.inf,np.inf ],
+                }
 
-def ema(df: pd.DataFrame, key:str, window: int) -> pd.Series:
+    return pd.DataFrame(out, index=series.index), out_range
+
+
+
+
+def ema(df: pd.DataFrame, key:str, key_range: List[float], window: int) -> pd.Series:
     series = df[key].copy()
-    return series.ewm(span=window, adjust=False, min_periods=window).mean()
+    out = {"value": series.ewm(span=window, adjust=False, min_periods=window).mean()}
+    out_range = {"value": range_mapping(key_range)}
+    return pd.DataFrame(out, index = series.index), out_range
 
 
-# def ma(df: pd.DataFrame, key:str,window:int)->pd.Series:
-#     """ moving average """
-#     _df = df.copy()
-#     assert window>0 and key in df.columns
-#     # feature_name = 'ma_'+key+'_'+str(window)
-#     seri = _df[key].rolling(window=window).mean()
-#     return seri
+
+
+
+
+
+
+
+
+#============= draft ===========================
 
 def break_high(df: pd.DataFrame, key, ):
     _df = df.copy()

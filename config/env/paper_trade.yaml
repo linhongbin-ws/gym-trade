@@ -1,0 +1,6 @@
+init_balance: 1e6
+commission_type: free 
+reward_type: sparse
+dash_keys: ['pos','cash', 'balance','pnl']
+action_deadzone: 0.01
+action_on: close_t_minus_1 # apply action on which time frame: [close_t_minus_1, open_t]
