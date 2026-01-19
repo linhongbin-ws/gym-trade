@@ -1,2 +1,17 @@
 name: dummy
-obs_keys: ["dash@pos","open","close","high","low"] 
+
+obs_keys:
+  - dash@pos
+  - open
+  - close
+  - high
+  - low
+
+mainchart_keys:
+  - ma60@value
+
+subchart_keys:
+  - dash@pos
+  - dash@cash
+  - dash@balance
+  - dash@pnl

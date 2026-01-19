@@ -4,7 +4,7 @@ from gym_trade.policy.registry import register_policy
 
 @register_policy
 class Policy(BasePolicy):
-    def __init__(self, obs_keys: list[str]): 
+    def __init__(self, obs_keys: list[str], **kwargs ): 
         self._obs_keys = obs_keys 
 
     def init_policy(self,):

@@ -28,7 +28,6 @@ def load_data(cfg: DictConfig) -> list[pd.DataFrame]:
         
         dfs = []
         for symbol in cfg.data.symbol:
-            assert False, symbol
             cache_csv_dir =Path(cfg.data.cache_dir) /cfg.data.interval /f"{symbol}.csv" 
             if cfg.data.use_cache and cache_csv_dir.exists(): 
                 df = pd.read_csv(cache_csv_dir)
@@ -79,15 +78,15 @@ def bt(cfg: DictConfig, df_list: list[pd.DataFrame]) -> None:
     for df in df_list: 
         if cfg.mode.start is not None:
             date = datetime.strptime(cfg.mode.start, "%Y-%m-%d")
-            if cfg.mode.interval == "1m": 
+            if cfg.data.interval == "1m": 
                 date = date.replace(hour=9, minute=30)
 
-            df = df.truncate(after=date)
+            df = df.truncate(before=date)
         if cfg.mode.end is not None:
             date = datetime.strptime(cfg.mode.end, "%Y-%m-%d")
-            if cfg.mode.interval == "1m": 
+            if cfg.data.interval == "1m": 
                 date = date.replace(hour=4, minute=00)
-            df = df.truncate(before=date)
+            df = df.truncate(after=date)
         _df_list.append(df)
 
 
@@ -105,13 +104,21 @@ def bt(cfg: DictConfig, df_list: list[pd.DataFrame]) -> None:
     for df in _df_list:
         env = PaperTrade(df_list=[df],**args)
     
+
     obs = env.reset()
     done = False
+
     while not done:
         action = policy(obs)
         obs, reward, done, info = env.step(action)
         print(f"action {action}, reward {reward}, progress {env._t}/{len(env.df.index)-1} ", end='\r')
     print(f"pnl: {env.pnl}")
+   
+    # mainchart_keys = [k for k in env.df.columns if k.startswith(tuple(cfg.gui.mainchart_types)) ]
+    # subchart_keys = [k for k in env.df.columns if k.startswith(tuple(cfg.gui.subchart_types)) ] 
+    vis_lightweight_chart_df(env.df, mainchart_keys=cfg.policy.mainchart_keys , 
+                                subchart_keys=cfg.policy.subchart_keys , 
+                                mainchart_height=cfg.gui.mainchart_height)
     # while not done:
     #     if obs['direction_toggle_pattern_strongup_acc@close'] >=1:
     #         sig_cnt+=1
@@ -136,36 +143,39 @@ def bt(cfg: DictConfig, df_list: list[pd.DataFrame]) -> None:
 
 
 def vis_lightweight_chart_df(df,
+    mainchart_keys: list[str] = [],
+    subchart_keys: list[str] = [],
+    mainchart_height: float = 0.6, 
    ):
-    main_chart_width = 0.6
-    chart = Chart(toolbox=True,inner_width=1,inner_height=main_chart_width)
+    chart = Chart(toolbox=True,inner_width=1,inner_height=mainchart_height)
     chart.candle_style(down_color='#00ff55', up_color='#ed4807')
     chart.set(df)
     random_color = lambda : f'rgba({random.randint(100, 255)}, {random.randint(100, 255)}, {random.randint(100, 255)}, 0.9)'
 
 
+    lines = {}
 
-    if cfg.mode.mainchart is not None:
-        for k in cfg.mode.mainchart:
-            line_df = pd.DataFrame({
-                'time': df.index,
-                k: df[k]
-            })
-            line_df = line_df.dropna()
-            line = chart.create_line(k, color = random_color(),)
-            chart.legend(True)
-            line.set(line_df)
-    if cfg.mode.subchart is not None:
-        for k in cfg.mode.subchart:
-            subchart = chart.create_subchart(position='left', width=1, height=(1-main_chart_width)/len(cfg.subchart),sync=True)
-            subchart.legend(True)
-            line = subchart.create_line(k)
-            line_df = pd.DataFrame({
-                'time': df.index,
-                k: df[k]
-            })
-            # line_df = line_df.dropna()
-            line.set(line_df)
+    # assert False, mainchart_keys
+    for k in mainchart_keys:
+        line_df = pd.DataFrame({
+            'time': df.index,
+            k: df[k]
+        })
+        # line_df = line_df.dropna()
+        lines[k] = chart.create_line(k, color = random_color(),)
+        chart.legend(True)
+        lines[k].set(line_df)
+
+    for k in subchart_keys:
+        subchart = chart.create_subchart(position='left', width=1, height=(1-mainchart_height)/len(subchart_keys),sync=True)
+        subchart.legend(True)
+        lines[k] = subchart.create_line(k)
+        line_df = pd.DataFrame({
+            'time': df.index,
+            k: df[k]
+        })
+        # line_df = line_df.dropna()
+        lines[k].set(line_df)
         
 
 
@@ -174,8 +184,8 @@ def vis_lightweight_chart_df(df,
 
 
 def vis(cfg: DictConfig, df_list: list[pd.DataFrame]) -> None:
-
-
+    for df in df_list: 
+        vis_lightweight_chart_df(df, mainchart_keys=cfg.gui.mainchart_keys, subchart_keys=cfg.gui.subchart_keys , mainchart_height=cfg.gui.mainchart_height) 
  
 
 

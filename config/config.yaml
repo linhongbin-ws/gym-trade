@@ -6,6 +6,7 @@ defaults:
   - data: yf
   - policy: dummy
   - env: paper_trade 
+  - gui: lightweight_charts 
 
 general:
   proxy: http://127.0.0.1:7897

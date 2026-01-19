@@ -1,0 +1,5 @@
+mainchart_keys: [] 
+subchart_keys: []  
+mainchart_height: 0.6 
+mainchart_types: [ma, ema, ]
+subchart_types: [rlf,dash] 
