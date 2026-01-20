@@ -6,9 +6,10 @@ from typing import List
 from gym_trade.tool import ta
 from copy import deepcopy
 import traceback
+from typing import Tuple, Dict
 
 def make_ta(df: pd.DataFrame, ta_dict_dict: dict[str, dict], col_range_key: dict| None = None,
-         debug: bool= False) -> pd.DataFrame: 
+         debug: bool= True) -> pd.DataFrame: 
 
     # input df will have columns of ['date', 'close', 'high', 'low', 'open', 'volume']
     if col_range_key is None:
@@ -160,8 +161,256 @@ def ema(df: pd.DataFrame, key:str, key_range: List[float], window: int) -> pd.Se
 
 
 
+def rsi_momentum_features(
+    df: pd.DataFrame,
+    key: str,
+    key_range: List[float],
+    rsi_window: int = 14,
+    mom_periods: List[int] = [1, 5, 15],
+    ema_fast: int = 12,
+    ema_slow: int = 48,
+    eps: float = 1e-12
+) -> Tuple[pd.DataFrame, Dict[str, List[float]]]:
+    series = df[key].astype(float).copy()
+
+    # RSI (Wilder-style via EMA on gains/losses)
+    delta = series.diff()
+    gain = np.where(delta > 0, delta, 0.0)
+    loss = np.where(delta < 0, -delta, 0.0)
+    gain_ema = pd.Series(gain, index=series.index).ewm(alpha=1/rsi_window, adjust=False, min_periods=rsi_window).mean()
+    loss_ema = pd.Series(loss, index=series.index).ewm(alpha=1/rsi_window, adjust=False, min_periods=rsi_window).mean()
+
+    rs = gain_ema / (loss_ema + eps)
+    rsi = 100.0 - (100.0 / (1.0 + rs))
+
+    # momentum returns
+    mom = {}
+    for p in mom_periods:
+        mom[f"mom_{p}"] = series.pct_change(p)
+
+    # EMA trend
+    ef = series.ewm(span=ema_fast, adjust=False, min_periods=ema_fast).mean()
+    es = series.ewm(span=ema_slow, adjust=False, min_periods=ema_slow).mean()
+    ema_diff_norm = (ef - es) / (series.abs() + eps)
+
+    out = {
+        "rsi": rsi,
+        "ema_fast": ef,
+        "ema_slow": es,
+        "ema_diff_norm": ema_diff_norm,
+        **mom,
+    }
+
+    out_range = {
+        "rsi": [0.0, 100.0],
+        "ema_fast": [-np.inf, np.inf],
+        "ema_slow": [-np.inf, np.inf],
+        "ema_diff_norm": [-np.inf, np.inf],
+    }
+    for p in mom_periods:
+        out_range[f"mom_{p}"] = [-np.inf, np.inf]
+
+    return pd.DataFrame(out, index=series.index), out_range
 
 
+
+def bollinger_features(
+    df: pd.DataFrame,
+    key: str,
+    key_range: List[float],
+    window: int,
+    n_std: float = 2.0,
+    eps: float = 1e-12
+) -> Tuple[pd.DataFrame, Dict[str, List[float]]]:
+    series = df[key].astype(float).copy()
+
+    mid = series.rolling(window, min_periods=window).mean()
+    std = series.rolling(window, min_periods=window).std()
+
+    upper = mid + n_std * std
+    lower = mid - n_std * std
+
+    bandwidth = (upper - lower) / (mid.abs() + eps)
+    pct_b = (series - lower) / ((upper - lower) + eps)
+    z = (series - mid) / (std + eps)
+
+    out = {
+        "mid": mid,
+        "upper": upper,
+        "lower": lower,
+        "bandwidth": bandwidth,
+        "pct_b": pct_b,
+        "z": z,
+    }
+
+    out_range = {
+        "mid": [-np.inf, np.inf],
+        "upper": [-np.inf, np.inf],
+        "lower": [-np.inf, np.inf],
+        "bandwidth": [0.0, np.inf],
+        "pct_b": [-np.inf, np.inf],   # often ~[0,1], but can exceed if price breaks bands
+        "z": [-np.inf, np.inf],
+    }
+
+    return pd.DataFrame(out, index=series.index), out_range
+
+
+
+def atr_features(
+    df: pd.DataFrame,
+    key_range: List[float],
+    window: int,
+    eps: float = 1e-12
+) -> Tuple[pd.DataFrame, Dict[str, List[float]]]:
+    high = df["high"].astype(float)
+    low = df["low"].astype(float)
+    close = df["close"].astype(float)
+    open_ = df["open"].astype(float)
+
+    prev_close = close.shift(1)
+
+    tr = pd.concat(
+        [(high - low), (high - prev_close).abs(), (low - prev_close).abs()],
+        axis=1
+    ).max(axis=1)
+
+    atr = tr.rolling(window, min_periods=window).mean()
+
+    atr_norm = atr / (close.abs() + eps)
+    range_norm = (high - low) / (close.abs() + eps)
+    gap_norm = (open_ - prev_close) / (prev_close.abs() + eps)
+
+    out = {
+        "tr": tr,
+        "atr": atr,
+        "atr_norm": atr_norm,
+        "range_norm": range_norm,
+        "gap_norm": gap_norm,
+    }
+
+    out_range = {
+        "tr": [0.0, np.inf],
+        "atr": [0.0, np.inf],
+        "atr_norm": [0.0, np.inf],
+        "range_norm": [0.0, np.inf],
+        "gap_norm": [-np.inf, np.inf],
+    }
+
+    return pd.DataFrame(out, index=df.index), out_range
+
+
+def candle_structure_features(
+    df: pd.DataFrame,
+    key_range: List[float],
+    eps: float = 1e-12
+) -> Tuple[pd.DataFrame, Dict[str, List[float]]]:
+    o = df["open"].astype(float)
+    h = df["high"].astype(float)
+    l = df["low"].astype(float)
+    c = df["close"].astype(float)
+
+    body = c - o
+    bar_range = (h - l).abs() + eps
+
+    upper_wick = h - np.maximum(o, c)
+    lower_wick = np.minimum(o, c) - l
+
+    body_norm = body / (c.abs() + eps)
+    upper_wick_norm = upper_wick / bar_range
+    lower_wick_norm = lower_wick / bar_range
+    close_pos = (c - l) / bar_range
+    is_bull = (c > o).astype(float)
+
+    out = {
+        "body": body,
+        "body_norm": body_norm,
+        "upper_wick_norm": upper_wick_norm,
+        "lower_wick_norm": lower_wick_norm,
+        "close_pos": close_pos,
+        "is_bull": is_bull,
+    }
+
+    out_range = {
+        "body": [-np.inf, np.inf],
+        "body_norm": [-np.inf, np.inf],
+        "upper_wick_norm": [0.0, 1.0],
+        "lower_wick_norm": [0.0, 1.0],
+        "close_pos": [0.0, 1.0],
+        "is_bull": [0.0, 1.0],
+    }
+
+    return pd.DataFrame(out, index=df.index), out_range
+
+
+
+def vwap_features(
+    df: pd.DataFrame,
+    key_range: List[float],
+    price_key: str = "close",
+    dev_z_window: int = 60,
+    eps: float = 1e-12
+) -> Tuple[pd.DataFrame, Dict[str, List[float]]]:
+    price = df[price_key].astype(float)
+    vol = df["volume"].astype(float)
+
+    # group by date, reset each session
+    date = df.index.date
+    pv = price * vol
+    cum_pv = pv.groupby(date).cumsum()
+    cum_vol = vol.groupby(date).cumsum()
+    vwap = cum_pv / cum_vol.replace(0.0, np.nan)
+
+    dev = (price - vwap) / (vwap.abs() + eps)
+
+    # rolling zscore of dev (for mean-reversion thresholds)
+    dev_mean = dev.rolling(dev_z_window, min_periods=dev_z_window).mean()
+    dev_std = dev.rolling(dev_z_window, min_periods=dev_z_window).std()
+    dev_z = (dev - dev_mean) / (dev_std + eps)
+
+    out = {
+        "vwap": vwap,
+        "dev": dev,
+        "dev_z": dev_z,
+    }
+    out_range = {
+        "vwap": [-np.inf, np.inf],
+        "dev": [-np.inf, np.inf],
+        "dev_z": [-np.inf, np.inf],
+    }
+
+    return pd.DataFrame(out, index=df.index), out_range
+
+
+def volume_features(
+    df: pd.DataFrame,
+    key_range: List[float],
+    window: int,
+    eps: float = 1e-12
+) -> Tuple[pd.DataFrame, Dict[str, List[float]]]:
+    vol = df["volume"].astype(float)
+
+    vol_mean = vol.rolling(window, min_periods=window).mean()
+    vol_std = vol.rolling(window, min_periods=window).std()
+
+    vol_ratio = vol / (vol_mean + eps)
+    vol_z = (vol - vol_mean) / (vol_std + eps)
+
+    # reuse your linreg helper for a "volume trend" feature
+    lin_df, _ = rolling_linreg_features(df.assign(_vol=vol), key="_vol", key_range=[0, 1], window=window)
+    vol_slope = lin_df["slope"]
+
+    out = {
+        "vol_ratio": vol_ratio,
+        "vol_z": vol_z,
+        "vol_slope": vol_slope,
+    }
+    out_range = {
+        "vol_ratio": [0.0, np.inf],
+        "vol_z": [-np.inf, np.inf],
+        "vol_slope": [-np.inf, np.inf],
+    }
+
+    return pd.DataFrame(out, index=df.index), out_range
 
 
 

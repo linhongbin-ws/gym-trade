@@ -1,0 +1,8 @@
+rsi_standard:
+  func: rsi_momentum_features
+  key: close
+  rsi_window:  14
+  mom_periods: [1, 5, 15]
+  ema_fast:  12
+  ema_slow:  48
+  eps:  1e-12

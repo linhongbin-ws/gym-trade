@@ -109,7 +109,9 @@ class PaperTrade(BaseEnv):
             if stock_pos > 0: 
                 self._df['dash@cash'].iloc[self._t] = cash_prv - action_cash
                 self._df['dash@pos'].iloc[self._t] = pos_prv + stock_pos 
-            
+            else:
+                self._df['dash@cash'].iloc[self._t] = cash_prv 
+                self._df['dash@pos'].iloc[self._t] = pos_prv  
 
         
         # sell
@@ -121,7 +123,10 @@ class PaperTrade(BaseEnv):
             if sell_cash >=0: # if sell price after commision is negative, we keep it not sell
                 self._df['dash@cash'].iloc[self._t] = cash_prv + sell_cash
                 self._df['dash@pos'].iloc[self._t] = pos_prv - stock_pos
-        
+            else:
+                self._df['dash@cash'].iloc[self._t] = cash_prv 
+                self._df['dash@pos'].iloc[self._t] = pos_prv  
+
         # hold
         else:
             self._df['dash@cash'].iloc[self._t] = cash_prv

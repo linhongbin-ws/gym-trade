@@ -1,11 +1,12 @@
-name: dummy
+name: trend_momentum
 
 ta_select_keys:
-  - ma5
-  - ma60
+  - rsi_standard
 
 obs_keys:
-  - ma5@value
+  - rsi_standard@ema_diff_norm
+  - rsi_standard@mom_5
+  - rsi_standard@mom_15
   - dash@pos
 
 mainchart_keys:

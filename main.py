@@ -61,7 +61,7 @@ def make_ta_features(cfg: DictConfig, dfs: list[pd.DataFrame]) -> pd.DataFrame:
     # make feature
     _dfs = []
     for df in dfs:
-        unfinish_dict = {k: v for k,v in cfg.ta.items()}
+        unfinish_dict = {k: v for k,v in cfg.ta.items() if k in cfg.policy.ta_select_keys}
         ta_len_prv = len(unfinish_dict.keys()) + 1
         col_range_key = None
         while not ta_len_prv==len(unfinish_dict.keys()):
