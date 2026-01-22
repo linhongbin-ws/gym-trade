@@ -1,18 +1,57 @@
 from gym_trade.policy.base import BasePolicy
 from gym_trade.policy.registry import register_policy
-
+import numpy as  np
+import gym
 
 @register_policy
 class Policy(BasePolicy):
-    def __init__(self, obs_keys: list[str], **kwargs ): 
+    def __init__(self, obs_keys: list[str],  **kwargs ): 
         self._obs_keys = obs_keys 
+        self.observation_space = None
+        self.init_hyper_param = {
+            "slope_pct_annual_thres": (0.05, 0.001, 1),
+            "r2_thres": (0.4, 0.001, 1),
+            "t_thres": (2.0, 0.001, 1),
+        }
 
-    def init_policy(self,):
-        pass
+    def init_policy(self, hyper_search: str | None = None):
+        if hyper_search is None:
+            self.hyper_param = {k: v[0] for k, v in self.init_hyper_param.items()}
+        elif hyper_search == "uniform":
+            self.hyper_param = {k: np.random.uniform(v[1], v[2]) for k, v in self.init_hyper_param.items()}
+        else:
+            raise NotImplementedError(f"hyper_search {hyper_search} not implemented")
+
+
     def __call__(self, obs, **kwargs):
-        action = 1
-        return action   
-    
+        prefix = "rlf_ma240_60@"
+        trend_up = (
+            (obs[prefix + "slope_pct_annual"] > self.hyper_param["slope_pct_annual_thres"]) &   
+            (obs[prefix + "r2"] > self.hyper_param["r2_thres"]) &
+            (np.abs(obs[prefix + "t"]) > self.hyper_param["t_thres"])
+        )
+
+        # trend_down = (
+        #     (obs[prefix + "slope_pct_annual"] < -0.05) &
+        #     (obs[prefix + "r2"] > 0.4) &
+        #     (obs[prefix + "t"].abs() > 2.0)
+        # )
+
+        accel_up = trend_up & (obs[prefix + "slope"] > 0)
+        decel_up = trend_up & (obs[prefix + "slope"] < 0)
+
+        if accel_up and obs["dash@pos"] == 0:
+            action = 1
+        elif decel_up and obs["dash@pos"] > 0:
+            action = -1
+        else:
+            action = 0   
+        return action
     @property
     def obs_keys(self): 
-        return self._obs_keys
+        prefix = "rlf_ma240_60@"
+        keys = [prefix + k for k in ["slope", "intercept", "r2", "t", "slope_pct_annual"]]
+        keys += ["dash@pos"]
+        return keys
+
+

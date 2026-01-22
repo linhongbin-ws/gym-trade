@@ -12,6 +12,7 @@ import yfinance as yf
 from datetime import datetime
 from pathlib import Path 
 from gym_trade.policy.registry import POLICY_REGISTRY
+from tqdm import tqdm
 
 def load_data(cfg: DictConfig) -> list[pd.DataFrame]:
     if cfg.data.name == 'yfinance':
@@ -63,17 +64,17 @@ def make_ta_features(cfg: DictConfig, dfs: list[pd.DataFrame]) -> pd.DataFrame:
     for df in dfs:
         unfinish_dict = {k: v for k,v in cfg.ta.items() if k in cfg.policy.ta_select_keys}
         ta_len_prv = len(unfinish_dict.keys()) + 1
-        col_range_key = None
+        col_range_dict = None
         while not ta_len_prv==len(unfinish_dict.keys()):
-            df, col_range_key, unfinish_dict = make_ta(df, cfg.ta, col_range_key=col_range_key)
+            df, col_range_dict, unfinish_dict = make_ta(df, cfg.ta, col_range_dict=col_range_dict)
             ta_len_prv = len(unfinish_dict.keys())
         assert len(unfinish_dict.keys()) == 0, f"unfinish ta {unfinish_dict.keys()} "
         _dfs.append(df)
     
-    return _dfs
+    return _dfs, col_range_dict
     
 
-def bt(cfg: DictConfig, df_list: list[pd.DataFrame]) -> None:
+def bt(cfg: DictConfig, df_list: list[pd.DataFrame], col_range_dict: dict) -> None:
     _df_list = []
     for df in df_list: 
         if cfg.mode.start is not None:
@@ -102,23 +103,43 @@ def bt(cfg: DictConfig, df_list: list[pd.DataFrame]) -> None:
     args["obs_keys"] = policy.obs_keys 
     args["interval"] = cfg.data.interval 
     for df in _df_list:
-        env = PaperTrade(df_list=[df],**args)
+        env = PaperTrade(df_list=[df], col_range_dict= col_range_dict, **args)
     
-
-    obs = env.reset()
-    done = False
-
-    while not done:
-        action = policy(obs)
-        obs, reward, done, info = env.step(action)
-        print(f"action {action}, reward {reward}, progress {env._t}/{len(env.df.index)-1} ", end='\r')
-    print(f"pnl: {env.pnl}")
-   
+    policy.observation_space = env.observation_space
+    
+    search_num = 1 if cfg.mode.hyper_search_type is None else cfg.mode.hyper_search_num
+    best_pnl_stat = None
+    for i in tqdm(range(search_num)):
+        policy.init_policy(None if i == 0 else cfg.mode.hyper_search_type)
+        obs = env.reset()
+        done = False
+        pos_prv = obs["dash@pos"]
+        pos_chg = 0
+        while not done:
+            action = policy(obs)
+            obs, reward, done, info = env.step(action)
+            if obs["dash@pos"] != pos_prv:
+                pos_chg += 1
+            if env._t % 500 == 0:
+                print(f"action {action}, reward {reward}, progress {env._t}/{len(env.df.index)-1} ", end='\r')
+            pos_prv = obs["dash@pos"]
+        
+        if best_pnl_stat is None:
+            best_pnl_stat = {}
+            best_pnl_stat["pnl"] = env.pnl
+            best_pnl_stat["hyper_param"] = policy.hyper_param
+        else:
+            if env.pnl > best_pnl_stat["pnl"]:
+                best_pnl_stat = {}
+                best_pnl_stat["pnl"] = env.pnl
+                best_pnl_stat["hyper_param"] = policy.hyper_param
+        print(f"pnl: {env.pnl}, best pnl: {best_pnl_stat['pnl']}, position change: {pos_chg} / {len(env.df.index)-1} ")
     # mainchart_keys = [k for k in env.df.columns if k.startswith(tuple(cfg.gui.mainchart_types)) ]
     # subchart_keys = [k for k in env.df.columns if k.startswith(tuple(cfg.gui.subchart_types)) ] 
-    vis_lightweight_chart_df(env.df, mainchart_keys=cfg.policy.mainchart_keys , 
-                                subchart_keys=cfg.policy.subchart_keys , 
-                                mainchart_height=cfg.gui.mainchart_height)
+    if not cfg.general.no_vis:
+        vis_lightweight_chart_df(env.df, mainchart_keys=cfg.policy.mainchart_keys , 
+                                    subchart_keys=cfg.policy.subchart_keys , 
+                                    mainchart_height=cfg.gui.mainchart_height)
     # while not done:
     #     if obs['direction_toggle_pattern_strongup_acc@close'] >=1:
     #         sig_cnt+=1
@@ -194,11 +215,11 @@ def main(cfg: DictConfig) -> None:
 
 
     dfs = load_data(cfg)
-    dfs = make_ta_features(cfg, dfs)
+    dfs, col_range_dict = make_ta_features(cfg, dfs)
     if cfg.mode.name == 'vis':
         vis(cfg, dfs)
     elif cfg.mode.name == 'bt':
-        bt(cfg, dfs)
+        bt(cfg, dfs, col_range_dict)
     else:
         raise NotImplementedError(f"Unsupported mode: {cfg.mode.mode}")
     return None

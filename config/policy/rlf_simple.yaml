@@ -1,0 +1,16 @@
+name: rlf_simple
+
+ta_select_keys:
+  - ma240
+  - rlf_ma240_60
+obs_keys:
+  - null
+
+mainchart_keys:
+  - ma240@value
+
+subchart_keys:
+  - dash@pos
+  - dash@cash
+  - dash@balance
+  - dash@pnl

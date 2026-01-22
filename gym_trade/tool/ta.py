@@ -8,12 +8,12 @@ from copy import deepcopy
 import traceback
 from typing import Tuple, Dict
 
-def make_ta(df: pd.DataFrame, ta_dict_dict: dict[str, dict], col_range_key: dict| None = None,
+def make_ta(df: pd.DataFrame, ta_dict_dict: dict[str, dict], col_range_dict: dict| None = None,
          debug: bool= True) -> pd.DataFrame: 
 
     # input df will have columns of ['date', 'close', 'high', 'low', 'open', 'volume']
-    if col_range_key is None:
-        col_range_key = {'close': [0, np.inf], 
+    if col_range_dict is None:
+        col_range_dict = {'close': [0, np.inf], 
                         'high': [0, np.inf],  
                         'low': [0, np.inf],  
                         'open': [0, np.inf],  
@@ -26,7 +26,7 @@ def make_ta(df: pd.DataFrame, ta_dict_dict: dict[str, dict], col_range_key: dict
         call = globals()[func]
         args = {k: v for k, v in ta_arg_dict.items() if k != 'func' }
         try:
-            args['key_range'] = col_range_key[args['key']]
+            args['key_range'] = col_range_dict[args['key']]
             ta_results, ta_ranges = call(df, **args)
         except Exception as e:
             if debug:
@@ -37,10 +37,10 @@ def make_ta(df: pd.DataFrame, ta_dict_dict: dict[str, dict], col_range_key: dict
             for k in ta_results.columns:
                 name = ta_name + '@' + k
                 df[name] = ta_results[k]
-                col_range_key[name] = ta_ranges[k]
+                col_range_dict[name] = ta_ranges[k]
         else:
             raise NotImplementedError(f"Unsupported return type: {type(ta_results)}") 
-    return df, col_range_key, unfinish_dict, 
+    return df, col_range_dict, unfinish_dict, 
 
 
 def _rolling_conv(y: np.ndarray, w: np.ndarray) -> np.ndarray:

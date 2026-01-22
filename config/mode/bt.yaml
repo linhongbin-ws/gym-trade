@@ -1,3 +1,5 @@
 name: bt
 start: null
 end: null
+hyper_search_type: null
+hyper_search_num: 10

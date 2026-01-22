@@ -19,6 +19,7 @@ class PaperTrade(BaseEnv):
                     dash_keys: List[str] =  ['pos','cash', 'balance','pnl'],
                     action_deadzone: float = 0.01,
                     action_on: str = "close_t_minus_1", # apply action on which time frame: [close_t_minus_1, open_t]
+                    col_range_dict: dict = None,
                     ):
         
         super().__init__()
@@ -36,6 +37,20 @@ class PaperTrade(BaseEnv):
         self._dash_keys = dash_keys
         self._action_deadzone = action_deadzone 
         self._action_on = action_on
+        self._col_range_dict = col_range_dict
+
+        default_col_range_dict = {'close': [0, np.inf], 
+                                'high': [0, np.inf],  
+                                'low': [0, np.inf],  
+                                'open': [0, np.inf],  
+                                'volume': [0, np.inf], 
+                                'dash@pos': [0, np.inf],
+                                'dash@cash': [-np.inf, np.inf],
+                                'dash@balance': [-np.inf, np.inf],
+                                'dash@pnl': [-np.inf, np.inf],}
+        for k in default_col_range_dict:
+            if k not in self._col_range_dict:
+                self._col_range_dict[k] = default_col_range_dict[k]
 
 
         self.seed(0)
@@ -76,14 +91,10 @@ class PaperTrade(BaseEnv):
     def observation_space(self):
         obs = {}
         for v in self._obs_keys:
-            if v=="position_ratio":
-                obs[v] = gym.spaces.Box(low=0,high=1,shape=(1,),dtype=float)
-            elif v=="timestep":
-                obs[v] = gym.spaces.Box(low=0,high=389,shape=(1,),dtype=int)
-            elif v in ["open","close","high","low"]:
-                obs[v] = gym.spaces.Box(low=-np.inf,high=np.inf,shape=(1,),dtype=float)
+            if v in self._col_range_dict:
+                obs[v] = gym.spaces.Box(low=self._col_range_dict[v][0], high=self._col_range_dict[v][1], shape=(1,), dtype=float)
             else:
-                raise NotImplementedError
+                raise NotImplementedError(f"col_range_dict for {v} is not found")
         return gym.spaces.Dict(obs)
 
     
