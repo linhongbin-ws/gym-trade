@@ -13,6 +13,17 @@ from datetime import datetime
 from pathlib import Path 
 from gym_trade.policy.registry import POLICY_REGISTRY
 from tqdm import tqdm
+import yaml
+
+def to_python(obj):
+    if isinstance(obj, np.generic):
+        return obj.item()
+    elif isinstance(obj, dict):
+        return {k: to_python(v) for k, v in obj.items()}
+    elif isinstance(obj, (list, tuple)):
+        return [to_python(v) for v in obj]
+    else:
+        return obj
 
 def load_data(cfg: DictConfig) -> list[pd.DataFrame]:
     if cfg.data.name == 'yfinance':
@@ -109,7 +120,10 @@ def bt(cfg: DictConfig, df_list: list[pd.DataFrame], col_range_dict: dict) -> No
     
     search_num = 1 if cfg.mode.hyper_search_type is None else cfg.mode.hyper_search_num
     best_pnl_stat = None
+    file_name = "bt_" + datetime.now().strftime("%Y-%m-%d-%H-%M-%S")+ ".yaml"
     for i in tqdm(range(search_num)):
+        # print(None if i == 0 else cfg.mode.hyper_search_type)
+        # assert False, None if i == 0 else cfg.mode.hyper_search_type
         policy.init_policy(None if i == 0 else cfg.mode.hyper_search_type)
         obs = env.reset()
         done = False
@@ -134,6 +148,29 @@ def bt(cfg: DictConfig, df_list: list[pd.DataFrame], col_range_dict: dict) -> No
                 best_pnl_stat["pnl"] = env.pnl
                 best_pnl_stat["hyper_param"] = policy.hyper_param
         print(f"pnl: {env.pnl}, best pnl: {best_pnl_stat['pnl']}, position change: {pos_chg} / {len(env.df.index)-1} ")
+    
+        save_result_dir = Path(cfg.mode.save_result_dir)
+        save_result_dir.mkdir(parents=True, exist_ok=True)
+        file = save_result_dir / file_name
+        # print("save_result_dir =", save_result_dir)
+        # print("file_name       =", file_name)
+
+        best_pnl_stat_save = {"best_pnl": best_pnl_stat,
+            "pos_chg": pos_chg}
+        with open(file, "w", encoding="utf-8") as f:
+            yaml.dump(
+                to_python(best_pnl_stat_save),
+                f,
+                default_flow_style=False,
+                allow_unicode=True,
+                sort_keys=False,
+                indent=4,
+            )
+
+
+
+
+
     # mainchart_keys = [k for k in env.df.columns if k.startswith(tuple(cfg.gui.mainchart_types)) ]
     # subchart_keys = [k for k in env.df.columns if k.startswith(tuple(cfg.gui.subchart_types)) ] 
     if not cfg.general.no_vis:

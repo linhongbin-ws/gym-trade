@@ -3,3 +3,4 @@ start: null
 end: null
 hyper_search_type: null
 hyper_search_num: 10
+save_result_dir: ./data/bt_results

@@ -6,8 +6,8 @@ from gym_trade.policy.registry import register_policy
 class Policy(BasePolicy):
     def __init__(self, obs_keys: list[str], **kwargs ): 
         self._obs_keys = obs_keys 
-
-    def init_policy(self,):
+        self.hyper_param = {}
+    def init_policy(self, hyper_search: str | None = None,**kwargs):
         pass
     def __call__(self, obs, **kwargs):
         action = 1
