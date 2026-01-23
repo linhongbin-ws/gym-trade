@@ -11,6 +11,8 @@ mainchart_keys:
 
 subchart_keys:
   - dash@pos
-  - dash@cash
-  - dash@balance
-  - dash@pnl
+  # - rlf_ma240_60@slope
+  # - rlf_ma240_60@intercept
+  # - rlf_ma240_60@r2
+  # - rlf_ma240_60@t
+  - rlf_ma240_60@slope_pct_annual
