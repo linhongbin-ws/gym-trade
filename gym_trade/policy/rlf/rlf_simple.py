@@ -6,21 +6,13 @@ import gym
 @register_policy
 class Policy(BasePolicy):
     def __init__(self, obs_keys: list[str],  **kwargs ): 
-        self._obs_keys = obs_keys 
-        self.observation_space = None
-        self.init_hyper_param = {
+        
+        hyper_param_range = {
             "slope_pct_annual_thres": (0.1, 0.001, 1),
-            "r2_thres": (0.4, 0.001, 1),
-            "t_thres": (2.0, 0.001, 1),
+            # "r2_thres": (0.4, 0.001, 1),
+            # "t_thres": (2.0, 0.001, 1),
         }
-
-    def init_policy(self, hyper_search: str | None = None):
-        if hyper_search is None:
-            self.hyper_param = {k: v[0] for k, v in self.init_hyper_param.items()}
-        elif hyper_search == "uniform":
-            self.hyper_param = {k: np.random.uniform(v[1], v[2]) for k, v in self.init_hyper_param.items()}
-        else:
-            raise NotImplementedError(f"hyper_search {hyper_search} not implemented")
+        super().__init__(hyper_param_range=hyper_param_range)
 
 
     def __call__(self, obs, **kwargs):
