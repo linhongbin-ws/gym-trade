@@ -8,7 +8,8 @@ class Policy(BasePolicy):
     def __init__(self, obs_keys: list[str],  **kwargs ): 
         
         hyper_param_range = {
-            "slope_pct_annual_thres": (0.1, 0.001, 1),
+            "slope_pct_annual_thres_buy": (0.1, 0.001, 1),
+            "slope_pct_annual_thres_sell": (0.1, 0.001, 1),
             # "r2_thres": (0.4, 0.001, 1),
             # "t_thres": (2.0, 0.001, 1),
         }
@@ -32,8 +33,8 @@ class Policy(BasePolicy):
         # accel_up = trend_up & (obs[prefix + "slope"] > 0)
         # decel_up = trend_up & (obs[prefix + "slope"] < 0)
 
-        accel_up = obs[prefix + "slope_pct_annual"] > self.hyper_param["slope_pct_annual_thres"]
-        decel_up = obs[prefix + "slope_pct_annual"] <= self.hyper_param["slope_pct_annual_thres"]
+        accel_up = obs[prefix + "slope_pct_annual"] > self.hyper_param["slope_pct_annual_thres_buy"]
+        decel_up = obs[prefix + "slope_pct_annual"] <= self.hyper_param["slope_pct_annual_thres_sell"]
 
         if accel_up and obs["dash@pos"] == 0:
             action = 1

@@ -1,7 +1,7 @@
 name: bt
 start: null
 end: null
-hyper_search: null
+hyper_search: uniform
 search_num: 10
 save_result_dir: .
 workers: 10
