@@ -102,6 +102,8 @@ class BTResult:
     policy_hyper_param: dict
     pos_chg: int
     id: str
+    hold_t: int 
+    total_t: int 
 
 
 
@@ -124,16 +126,21 @@ def bt_server_loop(policy_name,policy_args, env_args, df_list, stop_event, reque
         done = False
         pos_prv = obs["dash@pos"]
         pos_chg = 0
+        hold_cnt = 0
+        total_t = 0
         while not done and not stop_event.is_set():
+            total_t += 1
             action = policy(obs)
             obs, reward, done, info = env.step(action)
             if obs["dash@pos"] != pos_prv:
                 pos_chg += 1
+            if obs["dash@pos"] > 0:
+                hold_cnt += 1
             # if env._t % 500 == 0:
                 # print(f"action {action}, reward {reward}, progress {env._t}/{len(env.df.index)-1} ", end='\r')
             pos_prv = obs["dash@pos"]
         
-        result = BTResult(pnl=env.pnl, policy_hyper_param=policy.hyper_param, pos_chg=pos_chg, id=request.id)
+        result = BTResult(pnl=env.pnl, policy_hyper_param=policy.hyper_param, pos_chg=pos_chg, id=request.id, hold_t=hold_cnt, total_t=total_t)
         result_queue.put(result)
 
 
@@ -264,7 +271,7 @@ class BTServer:
                     
                     # print(f"best pnl: {best_pnl_stat['pnl']}, position change: {result.pos_chg} ")
                     # print(f"pnl: {env.pnl}, best pnl: {best_pnl_stat['pnl']}, position change: {pos_chg} / {len(env.df.index)-1} ")
-                    pbar.write(f"best pnl: {best_pnl_stat['pnl']:.3f}, pos chg: {result.pos_chg} ")
+                    pbar.write(f"best pnl: {best_pnl_stat['pnl']:.3f}, pos chg: {result.pos_chg} , hold t: {result.hold_t} / {result.total_t} ")
                     save_result_dir = Path(self._cfg.mode.save_result_dir)
                     save_result_dir.mkdir(parents=True, exist_ok=True)
                     file = save_result_dir / file_name
