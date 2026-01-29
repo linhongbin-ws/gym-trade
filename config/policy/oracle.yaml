@@ -1,0 +1,24 @@
+name: oracle
+
+ta_select_keys:
+  - null
+buy_dates:
+  - 1992-01-03 
+  - 2024-01-01
+sell_dates:
+  - 1992-01-05
+  - 1992-01-07
+  - 1992-01-08
+  - 1992-01-09
+  - 2024-01-05
+
+mainchart_keys:
+  - ma240@value
+
+subchart_keys:
+  - dash@pos
+  # - rlf_ma240_60@slope
+  # - rlf_ma240_60@intercept
+  # - rlf_ma240_60@r2
+  # - rlf_ma240_60@t
+  - rlf_ma240_60@slope_pct_annual

@@ -87,6 +87,7 @@ def make_ta_features(cfg: DictConfig, dfs: list[pd.DataFrame]) -> pd.DataFrame:
             df, col_range_dict, unfinish_dict = make_ta(df, cfg.ta, col_range_dict=col_range_dict)
             ta_len_prv = len(unfinish_dict.keys())
         assert len(unfinish_dict.keys()) == 0, f"unfinish ta {unfinish_dict.keys()} "
+        df['index_datetime'] = df.index.values
         _dfs.append(df)
     
     return _dfs, col_range_dict
@@ -106,6 +107,32 @@ class BTResult:
     total_t: int 
 
 
+def bt_rollout(request: BTRequest, policy, env: PaperTrade, stop_event = None):
+    policy.set_hyper_param(request.policy_hyper_param)
+    policy.init_policy()
+    obs = env.reset()
+    done = False
+    pos_prv = obs["dash@pos"]
+    pos_chg = 0
+    hold_cnt = 0
+    total_t = 0
+    while not done:
+        if stop_event is not None:
+            if stop_event.is_set():
+                break
+        total_t += 1
+        action = policy(obs)
+        obs, reward, done, info = env.step(action)
+        if obs["dash@pos"] != pos_prv:
+            pos_chg += 1
+        if obs["dash@pos"] > 0:
+            hold_cnt += 1
+        # if env._t % 500 == 0:
+            # print(f"action {action}, reward {reward}, progress {env._t}/{len(env.df.index)-1} ", end='\r')
+        pos_prv = obs["dash@pos"]
+    
+    result = BTResult(pnl=env.pnl, policy_hyper_param=policy.hyper_param, pos_chg=pos_chg, id=request.id, hold_t=hold_cnt, total_t=total_t)
+    return result
 
 
 def bt_server_loop(policy_name,policy_args, env_args, df_list, stop_event, request_queue, result_queue):
@@ -119,28 +146,28 @@ def bt_server_loop(policy_name,policy_args, env_args, df_list, stop_event, reque
         except QEmpty:
             continue
 
-
-        policy.set_hyper_param(request.policy_hyper_param)
-        policy.init_policy()
-        obs = env.reset()
-        done = False
-        pos_prv = obs["dash@pos"]
-        pos_chg = 0
-        hold_cnt = 0
-        total_t = 0
-        while not done and not stop_event.is_set():
-            total_t += 1
-            action = policy(obs)
-            obs, reward, done, info = env.step(action)
-            if obs["dash@pos"] != pos_prv:
-                pos_chg += 1
-            if obs["dash@pos"] > 0:
-                hold_cnt += 1
-            # if env._t % 500 == 0:
-                # print(f"action {action}, reward {reward}, progress {env._t}/{len(env.df.index)-1} ", end='\r')
-            pos_prv = obs["dash@pos"]
         
-        result = BTResult(pnl=env.pnl, policy_hyper_param=policy.hyper_param, pos_chg=pos_chg, id=request.id, hold_t=hold_cnt, total_t=total_t)
+        # policy.set_hyper_param(request.policy_hyper_param)
+        # policy.init_policy()
+        # obs = env.reset()
+        # done = False
+        # pos_prv = obs["dash@pos"]
+        # pos_chg = 0
+        # hold_cnt = 0
+        # total_t = 0
+        # while not done and not stop_event.is_set():
+        #     total_t += 1
+        #     action = policy(obs)
+        #     obs, reward, done, info = env.step(action)
+        #     if obs["dash@pos"] != pos_prv:
+        #         pos_chg += 1
+        #     if obs["dash@pos"] > 0:
+        #         hold_cnt += 1
+        #     # if env._t % 500 == 0:
+        #         # print(f"action {action}, reward {reward}, progress {env._t}/{len(env.df.index)-1} ", end='\r')
+        #     pos_prv = obs["dash@pos"]
+        result = bt_rollout(request, policy, env, stop_event)
+        # result = BTResult(pnl=env.pnl, policy_hyper_param=policy.hyper_param, pos_chg=pos_chg, id=request.id, hold_t=hold_cnt, total_t=total_t)
         result_queue.put(result)
 
 
@@ -155,48 +182,54 @@ class BTServer:
             n_workers: int = 2,
     ):
         self._n_workers = cfg.mode.workers 
-        ctx = mp.get_context("spawn")  # 跨平台更稳（Windows/macOS 必须 spawn）
-        self._request_queue = ctx.Queue(maxsize=self.n_workers * 4)
-        self._result_queue= ctx.Queue()
-        self._stop_event = ctx.Event()
+
+        if self._n_workers > 1:
+            ctx = mp.get_context("spawn")  # 跨平台更稳（Windows/macOS 必须 spawn）
+            self._request_queue = ctx.Queue(maxsize=self.n_workers * 4)
+            self._result_queue= ctx.Queue()
+            self._stop_event = ctx.Event()
 
 
-        self.procs = [
-            ctx.Process(target=bt_server_loop, args=(policy_name,policy_args, env_args, df_list, self._stop_event, self._request_queue , self._result_queue))
-            for _ in range(self.n_workers)
-        ]
-        for p in self.procs:
-            # p.daemon = True
-            p.start()
+            self.procs = [
+                ctx.Process(target=bt_server_loop, args=(policy_name,policy_args, env_args, df_list, self._stop_event, self._request_queue , self._result_queue))
+                for _ in range(self.n_workers)
+            ]
+            for p in self.procs:
+                # p.daemon = True
+                p.start()
+            
         self._closed = False
         self._cfg = cfg
         self._policy_args = policy_args
         self._env_args = env_args
         self._df_list = df_list
+        self._policy_name = policy_name
 
     @property
     def n_workers(self):
         return self._n_workers
 
     def shutdown(self, join_timeout: float = 5.0):
-        self._stop_event.set()
+
+        if self._n_workers > 1:
+            self._stop_event.set()
 
 
-        # wait for graceful exit
-        for p in self.procs:
-            p.join(join_timeout)
+            # wait for graceful exit
+            for p in self.procs:
+                p.join(join_timeout)
 
-        # force kill remaining
-        for p in self.procs:
-            if p.is_alive():
-                p.terminate()
-                p.join()
+            # force kill remaining
+            for p in self.procs:
+                if p.is_alive():
+                    p.terminate()
+                    p.join()
 
-        # NOW it's safe to close queues
-        self._request_queue.close()
-        self._result_queue.close()
-        self._request_queue.join_thread()
-        self._result_queue.join_thread()
+            # NOW it's safe to close queues
+            self._request_queue.close()
+            self._result_queue.close()
+            self._request_queue.join_thread()
+            self._result_queue.join_thread()
 
 
     # 让 with BTServer(...) 自动清理
@@ -208,83 +241,93 @@ class BTServer:
         return False
 
     def backtest(self):
-        # _df_list = []
-        # for df in df_list: 
-        #     if cfg.mode.start is not None:
-        #         date = datetime.strptime(cfg.mode.start, "%Y-%m-%d")
-        #         if cfg.data.interval == "1m": 
-        #             date = date.replace(hour=9, minute=30)
-
-        #         df = df.truncate(before=date)
-        #     if cfg.mode.end is not None:
-        #         date = datetime.strptime(cfg.mode.end, "%Y-%m-%d")
-        #         if cfg.data.interval == "1m": 
-        #             date = date.replace(hour=4, minute=00)
-        #         df = df.truncate(after=date)
-        #     _df_list.append(df)
-
-
-        # create policy
-        # print(f"avaliable poliy", print(POLICY_REGISTRY.keys()))
-        # policy_cls = POLICY_REGISTRY[self._cfg.policy.name]
-        # args = {k:v for k, v in self._cfg.policy.items() if k not in ["name"]}
-        # policy = policy_cls(**args)
-
-        # # create env
-        # args = OmegaConf.to_container(cfg.env, resolve=True) # to dict
-        # args = {k:v for k,v in args.items() if k not in ['name', 'start', 'end']}
-        # args["obs_keys"] = policy.obs_keys 
-        # args["interval"] = cfg.data.interval 
-        # for df in _df_list:
-        #     env = PaperTrade(df_list=[df], col_range_dict= col_range_dict, **args)
+ 
         
-        # policy.observation_space = env.observation_space
-        
-        # search_num = hyper_search_num
         policy_cls = POLICY_REGISTRY[self._cfg.policy.name]
         policy = policy_cls(**self._policy_args)
         best_pnl_stat = None
         file_name = "bt_" + datetime.now().strftime("%Y-%m-%d-%H-%M-%S")+ ".yaml"
+
+        def deal_with_best_pnl(best_pnl_stat, new_result):
+            if best_pnl_stat is None:
+                best_pnl_stat = asdict(result)
+            elif result.pnl > best_pnl_stat["pnl"]:
+                best_pnl_stat = asdict(result)
+            else:
+                return best_pnl_stat
+            
+            # print(f"best pnl: {best_pnl_stat['pnl']}, position change: {result.pos_chg} ")
+            # print(f"pnl: {env.pnl}, best pnl: {best_pnl_stat['pnl']}, position change: {pos_chg} / {len(env.df.index)-1} ")
+            pbar.write(f"best pnl: {best_pnl_stat['pnl']:.3f}, pos chg: {result.pos_chg} , hold t: {result.hold_t} / {result.total_t} ")
+            save_result_dir = Path(self._cfg.mode.save_result_dir)
+            save_result_dir.mkdir(parents=True, exist_ok=True)
+            file = save_result_dir / file_name
+            best_pnl_stat_save = {"best_pnl": best_pnl_stat}
+            with open(file, "w", encoding="utf-8") as f:
+                yaml.dump(
+                    to_python(best_pnl_stat_save),
+                    f,
+                    default_flow_style=False,
+                    allow_unicode=True,
+                    sort_keys=False,
+                    indent=4,
+                )
+            return best_pnl_stat
+
+
         with tqdm(total=self._cfg.mode.search_num) as pbar:
-            while not self._stop_event.is_set() and pbar.n <= self._cfg.mode.search_num:
-                if not self._request_queue.full():
+
+            if self._n_workers == 1:
+                policy_cls = POLICY_REGISTRY[self._policy_name]
+                policy = policy_cls(**self._policy_args)
+                env = PaperTrade(df_list=self._df_list, **self._env_args)
+                for i in range(self._cfg.mode.search_num):
                     policy_hyper_param = policy.randomize_hyper_param(random_type=self._cfg.mode.hyper_search)
                     request = BTRequest(policy_hyper_param=policy_hyper_param, id=str(uuid.uuid4()))
-                    self._request_queue.put(request)
+                    result = bt_rollout(request, policy, env, stop_event=None)
+                    pbar.update(1)
+                    best_pnl_stat = deal_with_best_pnl(best_pnl_stat, result)
+            else:
+                while not self._stop_event.is_set() and pbar.n <= self._cfg.mode.search_num:
+                    if not self._request_queue.full():
+                        policy_hyper_param = policy.randomize_hyper_param(random_type=self._cfg.mode.hyper_search)
+                        request = BTRequest(policy_hyper_param=policy_hyper_param, id=str(uuid.uuid4()))
+                        self._request_queue.put(request)
 
-                if not self._result_queue.empty():
-                    try:
-                        result = self._result_queue.get(timeout=0.5)  # 定期醒来检查 stop_event
-                        pbar.update(1)
-                    except QEmpty:
-                        continue
-                    # if result.pnl > self._best_pnl:
-                    #     self._best_pnl = result.pnl
-                    #     self._best_hyper_param = result.hyper_param
-                    
-                    if best_pnl_stat is None:
-                        best_pnl_stat = asdict(result)
-                    elif result.pnl > best_pnl_stat["pnl"]:
-                        best_pnl_stat = asdict(result)
-                    else:
-                        continue
-                    
-                    # print(f"best pnl: {best_pnl_stat['pnl']}, position change: {result.pos_chg} ")
-                    # print(f"pnl: {env.pnl}, best pnl: {best_pnl_stat['pnl']}, position change: {pos_chg} / {len(env.df.index)-1} ")
-                    pbar.write(f"best pnl: {best_pnl_stat['pnl']:.3f}, pos chg: {result.pos_chg} , hold t: {result.hold_t} / {result.total_t} ")
-                    save_result_dir = Path(self._cfg.mode.save_result_dir)
-                    save_result_dir.mkdir(parents=True, exist_ok=True)
-                    file = save_result_dir / file_name
-                    best_pnl_stat_save = {"best_pnl": best_pnl_stat}
-                    with open(file, "w", encoding="utf-8") as f:
-                        yaml.dump(
-                            to_python(best_pnl_stat_save),
-                            f,
-                            default_flow_style=False,
-                            allow_unicode=True,
-                            sort_keys=False,
-                            indent=4,
-                        )
+                    if not self._result_queue.empty():
+                        try:
+                            result = self._result_queue.get(timeout=0.5)  # 定期醒来检查 stop_event
+                            pbar.update(1)
+                        except QEmpty:
+                            continue
+                        best_pnl_stat = deal_with_best_pnl(best_pnl_stat,result)
+                        # if result.pnl > self._best_pnl:
+                        #     self._best_pnl = result.pnl
+                        #     self._best_hyper_param = result.hyper_param
+                        
+                        # if best_pnl_stat is None:
+                        #     best_pnl_stat = asdict(result)
+                        # elif result.pnl > best_pnl_stat["pnl"]:
+                        #     best_pnl_stat = asdict(result)
+                        # else:
+                        #     continue
+                        
+                        # # print(f"best pnl: {best_pnl_stat['pnl']}, position change: {result.pos_chg} ")
+                        # # print(f"pnl: {env.pnl}, best pnl: {best_pnl_stat['pnl']}, position change: {pos_chg} / {len(env.df.index)-1} ")
+                        # pbar.write(f"best pnl: {best_pnl_stat['pnl']:.3f}, pos chg: {result.pos_chg} , hold t: {result.hold_t} / {result.total_t} ")
+                        # save_result_dir = Path(self._cfg.mode.save_result_dir)
+                        # save_result_dir.mkdir(parents=True, exist_ok=True)
+                        # file = save_result_dir / file_name
+                        # best_pnl_stat_save = {"best_pnl": best_pnl_stat}
+                        # with open(file, "w", encoding="utf-8") as f:
+                        #     yaml.dump(
+                        #         to_python(best_pnl_stat_save),
+                        #         f,
+                        #         default_flow_style=False,
+                        #         allow_unicode=True,
+                        #         sort_keys=False,
+                        #         indent=4,
+                        #     )
 
         
             # # print(None if i == 0 else cfg.mode.hyper_search_type)
