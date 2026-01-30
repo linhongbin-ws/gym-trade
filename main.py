@@ -477,7 +477,9 @@ def vis_lightweight_chart_df(df,
    ):
     chart = Chart(toolbox=True,inner_width=1,inner_height=mainchart_height)
     chart.candle_style(down_color='#00ff55', up_color='#ed4807')
-    chart.set(df)
+    _df = df[['close', 'open', 'high', 'low', 'volume']]
+    _df["time"] = df.index
+    chart.set(_df)
     random_color = lambda : f'rgba({random.randint(100, 255)}, {random.randint(100, 255)}, {random.randint(100, 255)}, 0.9)'
 
 
