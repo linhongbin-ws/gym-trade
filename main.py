@@ -1,13 +1,14 @@
 from dataclasses import dataclass, asdict
 import os
 from gym_trade.tool.preprocess import fill_missing_frame, standardlize_df
+from gym_trade.tool.get_data import load_data as load_data_func
 from lightweight_charts import Chart
 import numpy as np
 import pandas as pd
 from omegaconf import DictConfig, OmegaConf
 import hydra
 import random
-from gym_trade.tool.ta import make_ta
+from gym_trade.tool.ta import make_ta_all_safe
 from gym_trade.env.embodied import PaperTrade
 import yfinance as yf
 from datetime import datetime
@@ -33,35 +34,16 @@ def to_python(obj):
         return obj
 
 def load_data(cfg: DictConfig) -> list[pd.DataFrame]:
-    if cfg.data.name == 'yfinance':
-        if cfg.general.proxy is not None:
-            os.environ['HTTP_PROXY'] = cfg.general.proxy
-            os.environ['HTTPS_PROXY'] = cfg.general.proxy
-            print(f"set proxy to {cfg.general.proxy}")
-        args = {"interval": cfg.data.interval,
-         "period":'max'}
-        if cfg.data.start is not None:
-            args['start'] = cfg.data.start
-        if cfg.data.end is not None:
-            args['end'] = cfg.data.end
-        
-        dfs = []
-        for symbol in cfg.data.symbol:
-            cache_csv_dir =Path(cfg.data.cache_dir) /cfg.data.interval /f"{symbol}.csv" 
-            if cfg.data.use_cache and cache_csv_dir.exists(): 
-                df = pd.read_csv(cache_csv_dir)
-            else:
-                df = yf.download(symbol, multi_level_index=False, **args)
-                if not cache_csv_dir.parent.exists():
-                    cache_csv_dir.parent.mkdir(parents=True, exist_ok=True)
-                df.to_csv(cache_csv_dir)
-                
-            df = standardlize_df(df) 
-            if cfg.data.interval == "1m": 
-                df = fill_missing_frame(df)# filling missing frame
-            dfs.append(df)
-    else:
-        raise NotImplementedError(f"Unsupported data source: {cfg.data_name}")
+    dfs = load_data_func(
+        data_api=cfg.data.name,
+        proxy=cfg.general.proxy,
+        interval=cfg.data.interval,
+        start=cfg.data.start,
+        end=cfg.data.end,
+        symbols=cfg.data.symbol,
+        cache_dir=cfg.data.cache_dir,
+        force_download=cfg.data.force_download,
+    )
     return dfs
 
 def make_ta_features(cfg: DictConfig, dfs: list[pd.DataFrame]) -> pd.DataFrame: 
@@ -76,19 +58,21 @@ def make_ta_features(cfg: DictConfig, dfs: list[pd.DataFrame]) -> pd.DataFrame:
             del cfg[k]
     OmegaConf.set_struct(cfg, True)
 
+    ta_dict = {k: v for k,v in cfg.ta.items() if k in cfg.policy.ta_select_keys}
+    _dfs, col_range_dict = make_ta_all_safe(dfs, ta_dict)
 
-    # make feature
-    _dfs = []
-    for df in dfs:
-        unfinish_dict = {k: v for k,v in cfg.ta.items() if k in cfg.policy.ta_select_keys}
-        ta_len_prv = len(unfinish_dict.keys()) + 1
-        col_range_dict = None
-        while not ta_len_prv==len(unfinish_dict.keys()):
-            df, col_range_dict, unfinish_dict = make_ta(df, cfg.ta, col_range_dict=col_range_dict)
-            ta_len_prv = len(unfinish_dict.keys())
-        assert len(unfinish_dict.keys()) == 0, f"unfinish ta {unfinish_dict.keys()} "
-        df['index_datetime'] = df.index.values
-        _dfs.append(df)
+    # # make feature
+    # _dfs = []
+    # for df in dfs:
+    #     unfinish_dict = {k: v for k,v in cfg.ta.items() if k in cfg.policy.ta_select_keys}
+    #     ta_len_prv = len(unfinish_dict.keys()) + 1
+    #     col_range_dict = None
+    #     while not ta_len_prv==len(unfinish_dict.keys()):
+    #         df, col_range_dict, unfinish_dict = make_ta(df, cfg.ta, col_range_dict=col_range_dict)
+    #         ta_len_prv = len(unfinish_dict.keys())
+    #     assert len(unfinish_dict.keys()) == 0, f"unfinish ta {unfinish_dict.keys()} "
+    #     df['index_datetime'] = df.index.values
+    #     _dfs.append(df)
     
     return _dfs, col_range_dict
 

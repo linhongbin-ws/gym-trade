@@ -1,15 +1,38 @@
 import pandas as pd
-from os.path import isfile
-from gym_trade.tool.preprocess import fill_missing_frame, standardlize_df
 import numpy as np
 from typing import List 
-from gym_trade.tool import ta
 from copy import deepcopy
 import traceback
 from typing import Tuple, Dict
+import random
+
+def make_ta_all_safe(dfs: list[pd.DataFrame], ta_dicts: dict[str, dict]): 
+    return assert_no_lookahead(
+        dfs=dfs,
+        ta_dict=ta_dicts,
+        make_ta_all=make_ta_all,
+        min_start=1,
+        n_samples=None,   # or None for full scan
+    )
+
+def make_ta_all(dfs: list[pd.DataFrame], ta_dicts: dict[str, dict]):
+    _dfs = []
+    unfinish_dict =  ta_dicts
+    for df in dfs:
+        # unfinish_dict = {k: v for k,v in cfg.ta.items() if k in cfg.policy.ta_select_keys}
+        ta_len_prv = len(unfinish_dict.keys()) + 1
+        col_range_dict = None
+        while not ta_len_prv==len(unfinish_dict.keys()):
+            df, col_range_dict, unfinish_dict = make_ta(df, unfinish_dict, col_range_dict=col_range_dict)
+            ta_len_prv = len(unfinish_dict.keys())
+        assert len(unfinish_dict.keys()) == 0, f"unfinish ta {unfinish_dict.keys()} "
+        df['index_datetime'] = df.index.values
+        _dfs.append(df)
+    return _dfs, col_range_dict
+    
 
 def make_ta(df: pd.DataFrame, ta_dict_dict: dict[str, dict], col_range_dict: dict| None = None,
-         debug: bool= True) -> pd.DataFrame: 
+         ) -> pd.DataFrame: 
 
     # input df will have columns of ['date', 'close', 'high', 'low', 'open', 'volume']
     if col_range_dict is None:
@@ -28,9 +51,8 @@ def make_ta(df: pd.DataFrame, ta_dict_dict: dict[str, dict], col_range_dict: dic
         try:
             args['key_range'] = col_range_dict[args['key']]
             ta_results, ta_ranges = call(df, **args)
-        except Exception as e:
-            if debug:
-                traceback.print_exc()
+        except Exception:
+            traceback.print_exc()
             unfinish_dict[ta_name] = ta_arg_dict
             continue
         if isinstance(ta_results, pd.DataFrame):
@@ -41,6 +63,8 @@ def make_ta(df: pd.DataFrame, ta_dict_dict: dict[str, dict], col_range_dict: dic
         else:
             raise NotImplementedError(f"Unsupported return type: {type(ta_results)}") 
     return df, col_range_dict, unfinish_dict, 
+
+
 
 
 def _rolling_conv(y: np.ndarray, w: np.ndarray) -> np.ndarray:
@@ -71,6 +95,12 @@ def rolling_linreg_features(df: pd.DataFrame, key:str, key_range: List[float], w
     Rolling OLS on fixed x = 0..window-1.
     Returns slope, intercept, r2, tstat, slope_pct_annual (annualized slope / level).
     """
+    out_range = {"slope": [-np.inf,np.inf ],
+            "intercept": [-np.inf,np.inf ],
+            "r2": [0,1],
+            "t":  [-np.inf,np.inf ],
+            "slope_pct_annual": [-np.inf,np.inf ],
+            }
     series = df[key].copy()
     y = series.to_numpy(dtype=float)
     n = len(y)
@@ -83,7 +113,7 @@ def rolling_linreg_features(df: pd.DataFrame, key:str, key_range: List[float], w
         "slope_pct_annual": np.full(n, np.nan),
     }
     if w < 3 or n < w:
-        return pd.DataFrame(out, index=series.index)
+        return pd.DataFrame(out, index=series.index), out_range
 
     x = np.arange(w, dtype=float)
     sumx = x.sum()
@@ -141,12 +171,7 @@ def rolling_linreg_features(df: pd.DataFrame, key:str, key_range: List[float], w
     out["t"][idx] = tstat
     out["slope_pct_annual"][idx] = slope_pct_annual
 
-    out_range = {"slope": [-np.inf,np.inf ],
-                "intercept": [-np.inf,np.inf ],
-                "r2": [0,1],
-                "t":  [-np.inf,np.inf ],
-                "slope_pct_annual": [-np.inf,np.inf ],
-                }
+
 
     return pd.DataFrame(out, index=series.index), out_range
 
@@ -589,3 +614,172 @@ def direction_toggle(df, key):
     return_list['direction_toggle_pattern_strongup_acc@'+key] = strong_up_acc
 
     return return_list
+
+
+
+
+def assert_no_lookahead(
+    dfs,
+    ta_dict,
+    make_ta_all,
+    min_start=250,
+    n_samples=None,
+    atol=1e-6,
+):
+    """
+    Asserts that make_ta_all produces no look-ahead bias.
+
+    Parameters
+    ----------
+    dfs : list[pd.DataFrame]
+        Raw input dataframes
+    ta_dict : dict
+        TA configuration
+    make_ta_all : callable
+        TA generator
+    min_start : int
+        Minimum index to start checking
+    n_samples : int or None
+        If set, randomly sample cut points instead of full scan
+    atol : float
+        Numerical tolerance
+    """
+    dfs_full, col_range_dict_full = make_ta_all(dfs, ta_dict)
+    rows = len(dfs[0])
+
+    cut_points = range(min_start, rows)
+    if n_samples is not None:
+        cut_points = random.sample(list(cut_points), min(n_samples, rows - min_start))
+
+    for cut_idx in cut_points:
+        dfs_past, _ = make_ta_all([d.iloc[:cut_idx] for d in dfs], ta_dict)
+
+        for df_i in range(len(dfs)):
+            for col in dfs_past[df_i].columns:
+                if col == "index_datetime":
+                    continue
+
+                a = dfs_past[df_i][col]
+                b = dfs_full[df_i][col].iloc[:cut_idx]
+
+                # 1️⃣ Column-wide consistency
+                diff = (a - b).dropna()
+                if not diff.empty:
+                    max_diff = diff.abs().max()
+                    assert max_diff < atol, (
+                        f"[LOOKAHEAD] col={col}, "
+                        f"df={df_i}, cut={cut_idx}, "
+                        f"max_diff={max_diff}"
+                    )
+
+                # 2️⃣ Latest-row forced causality check
+                t = a.index[-1]
+                va = a.loc[t]
+                vb = b.loc[t]
+
+                if not (pd.isna(va) and pd.isna(vb)):
+                    assert abs(va - vb) < atol, (
+                        f"[LOOKAHEAD-LATEST] col={col}, "
+                        f"df={df_i}, time={t}, "
+                        f"va={va}, vb={vb}"
+                    )
+
+    return dfs_full, col_range_dict_full
+
+
+if __name__ == "__main__":
+    from gym_trade.tool.get_data import load_data  
+    symbols = ["TSLA"]
+    dfs  = load_data(symbols=symbols, interval="1d", start="2021-01-02", end='2024-01-05')
+    ta_dict = {}
+    ta_dict["ma240"] = {
+        "func": "ma",
+        "key": "close",
+        "window": 240,
+    }
+    ta_dict["rlf_ma240_10@close"] = {
+        "func": "rolling_linreg_features",
+        "key": "ma240@value",
+        "window": 10,
+    }
+
+    assert_no_lookahead(
+    dfs=dfs,
+    ta_dict=ta_dict,
+    make_ta_all=make_ta_all,
+    min_start=1,
+    n_samples=None,   # or None for full scan
+    )
+    dfs_all, col_range_dict_all = make_ta_all_safe(dfs, ta_dict,)
+    print("dfs_all", dfs_all)
+    print("col_range_dict_all", col_range_dict_all)
+
+
+    # dfs_all = make_ta_all(dfs, ta_dict,)
+    # rows = len(dfs[0].index)
+    # start_row = 4
+    # for i in range(start_row, rows):
+    #     dfs_cut = make_ta_all([d.iloc[:i] for d in dfs], ta_dict,)
+    #     dfs_cut_test = [d.iloc[:i] for d in dfs_all]
+    #     for col in dfs_cut[0].columns:
+    #         if col not in ["index_datetime"]:
+    #             for idx in range(len(dfs_cut)):
+    #                 diff_col = dfs_cut[idx][col] - dfs_cut_test[idx][col]
+    #                 diff_col = diff_col.dropna()
+    #                 if len(diff_col.index) == 0:
+    #                     continue
+    #                 diff = diff_col.abs().max()
+    #                 assert diff < 1e-6, f"diff is {diff} at {i}"
+
+
+    # dfs_full = make_ta_all(dfs, ta_dict)
+    # rows = len(dfs[0])
+    # start_row = 3
+
+    # for cut_idx in range(1, rows):
+    #     dfs_past = make_ta_all([d.iloc[:cut_idx] for d in dfs], ta_dict)
+
+    #     for idx in range(len(dfs)):
+    #         for col in dfs_past[idx].columns:
+    #             if col == "index_datetime":
+    #                 continue
+
+    #             a = dfs_past[idx][col]
+    #             b = dfs_full[idx][col].iloc[:cut_idx]
+                
+    #             df_diff = (a - b).dropna()
+    #             if len(df_diff.index) == 0:
+    #                 continue
+    #             diff = df_diff.abs().max()
+    #             assert diff < 1e-6, f"{col} diff {diff} at row {cut_idx}"
+
+
+    # dfs_full = make_ta_all(dfs, ta_dict)
+    # rows = len(dfs[0])
+
+    # for cut_idx in range(1, rows):
+    #     dfs_past = make_ta_all([d.iloc[:cut_idx] for d in dfs], ta_dict)
+
+    #     for idx in range(len(dfs)):
+    #         for col in dfs_past[idx].columns:
+    #             if col == "index_datetime":
+    #                 continue
+
+    #             a = dfs_past[idx][col]
+    #             b = dfs_full[idx][col].iloc[:cut_idx]
+
+    #             # 1️⃣ 全列一致性
+    #             diff_series = (a - b).dropna()
+    #             if len(diff_series) > 0:
+    #                 diff = diff_series.abs().max()
+    #                 assert diff < 1e-6, f"{col} diff {diff} at row {cut_idx}"
+
+    #             # 2️⃣ latest 行强制检查
+    #             last_idx = a.index[-1]
+    #             va = a.loc[last_idx]
+    #             vb = b.loc[last_idx]
+
+    #             if not (pd.isna(va) and pd.isna(vb)):
+    #                 assert abs(va - vb) < 1e-6, (
+    #                     f"{col} latest leak at row {cut_idx}"
+    #                 )

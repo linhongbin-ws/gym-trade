@@ -126,12 +126,13 @@ def standardlize_df(df: pd.DataFrame, interval: str = "1d" )-> pd.DataFrame:
     if _df.index.name is not None:
         _df.index.name = _df.index.name.lower() 
 
-    for col in _df.columns: 
-        assert col in ['date', 'open', 'high', 'low', 'close', 'volume'], f"column {col} is not supported" 
+    _df = _df[['open', 'high', 'low', 'close', 'volume']]
+    # for col in _df.columns: 
+    #     assert col in ['date', 'open', 'high', 'low', 'close', 'volume'], f"column {col} is not supported" 
     # change names
-    col_names = _df.columns.values
-    if 'date' in col_names:
-        _df.set_index('date', inplace=True)
+
+    # if 'date' in _df.columns.values:
+    #     _df.set_index('date', inplace=True)
 
     # to datetime
     assert len(_df.index) !=0    
