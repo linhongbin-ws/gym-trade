@@ -84,8 +84,9 @@ class PaperTrade(BaseEnv):
 
     @property
     def action_space(self):  
-        #  dz~1: buy, -1~-dz: sell, -dz~dz: hold=0 ; dz is action deadzone 
-        return gym.spaces.Box(low=-1, high=1, shape=(1,))
+        # action[0]: range [-1,0] hold same position, range (0,1] change position according to action[1]
+        # action[1]: range [-1, 1] mapping from minimum position to maximum position
+        return gym.spaces.Box(low=-1, high=1, shape=(2,))
     
     @property
     def observation_space(self):
@@ -107,52 +108,55 @@ class PaperTrade(BaseEnv):
         pos_prv = self._df['dash@pos'].iloc[self._t-1]
         if self._action_on == "close_t_minus_1":
             action_price = self._df['close'].iloc[self._t-1]
+            action_balance = self._df['dash@balance'].iloc[self._t-1]
         elif self._action_on == "open_t":
             action_price = open 
+            action_balance = cash_prv + pos_prv * open
 
-        
-        # buy
-        if action >= self._action_deadzone and cash_prv != 0:
-            action_cash = cash_prv * action
+        # action[0] decide whether hold, action[1] control the position 
+        # change position according to action[1]
+        if action[0] >0 :
             k, b = self._get_commision_coff()
-            stock_pos = np.floor((action_cash - b) / (k + action_price) ) # assume commision is linear model
-
-            if stock_pos > 0: 
-                self._df['dash@cash'].iloc[self._t] = cash_prv - action_cash
-                self._df['dash@pos'].iloc[self._t] = pos_prv + stock_pos 
+            max_pos = np.floor( (cash_prv - b) / (k + action_price) + pos_prv )
+            min_pos = np.ceil( (cash_prv - 2 * action_balance) / (k+ action_price) + pos_prv ) 
+            if action[1] > 0:
+                target_pos = np.floor(max_pos * action[1])
+                
+            elif action[1] < 0:
+                target_pos = np.ceil(min_pos * action[1])
             else:
-                self._df['dash@cash'].iloc[self._t] = cash_prv 
-                self._df['dash@pos'].iloc[self._t] = pos_prv  
+                target_pos = 0
 
-        
-        # sell
-        elif action <= -self._action_deadzone and pos_prv!=0:
-            k, b = self._get_commision_coff()
-            stock_pos = np.floor(pos_prv * np.abs(action))
-            commision_cash = stock_pos * k + b
-            sell_cash = stock_pos * action_price - commision_cash
-            if sell_cash >=0: # if sell price after commision is negative, we keep it not sell
-                self._df['dash@cash'].iloc[self._t] = cash_prv + sell_cash
-                self._df['dash@pos'].iloc[self._t] = pos_prv - stock_pos
-            else:
-                self._df['dash@cash'].iloc[self._t] = cash_prv 
-                self._df['dash@pos'].iloc[self._t] = pos_prv  
+            stock_pos_change = target_pos - pos_prv
+            commision = k * np.abs(stock_pos_change) + b 
+            self._df['dash@pos'].iloc[self._t] = target_pos
+            self._df['dash@cash'].iloc[self._t] = cash_prv - stock_pos_change * action_price - commision
+
+
+            # if stock_pos > 0: 
+            #     self._df['dash@cash'].iloc[self._t] = cash_prv - action_cash
+            #     self._df['dash@pos'].iloc[self._t] = pos_prv + stock_pos 
+            # else:
+            #     self._df['dash@cash'].iloc[self._t] = cash_prv 
+                # self._df['dash@pos'].iloc[self._t] = pos_prv  
+
+
 
         # hold
         else:
             self._df['dash@cash'].iloc[self._t] = cash_prv
             self._df['dash@pos'].iloc[self._t] = pos_prv
-            stock_pos = 0
+            stock_pos_change = 0
 
 
         self._df['dash@balance'].iloc[self._t] = self._df['dash@pos'].iloc[self._t] * close  \
                                                         + self._df['dash@cash'].iloc[self._t]
         self._df['dash@pnl'].iloc[self._t] = (self._df['dash@balance'].iloc[self._t] - self._init_balance)\
                                                        / self._init_balance 
-        self._df['action'].iloc[self._t-1] = action 
+        # self._df['action'].iloc[self._t-1] = action 
 
         info = {}
-        info['stock_pos_change'] = stock_pos
+        info['stock_pos_change'] = stock_pos_change
 
 
         assert self._df['dash@cash'].iloc[self._t] >=0, f"Cash cannot be negative: {self._df['dash@cash'].iloc[self._t]}"
@@ -202,6 +206,7 @@ class PaperTrade(BaseEnv):
         for k in self._obs_keys:
             obs[k] = self._df.iloc[self._t][k]
         return obs
+
     
     def _get_commision_coff(self):
         """

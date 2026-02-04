@@ -12,10 +12,12 @@ class Policy(BasePolicy):
 
 
     def __call__(self, obs, **kwargs):
+        action = np.zeros(2)
         if obs["dash@pos"] == 0:
-            action = 1
+            action[0] = 1
+            action[1] = 1
         else:
-            action = 0   
+            action[0] = 0 
         return action
     @property
     def obs_keys(self): 
