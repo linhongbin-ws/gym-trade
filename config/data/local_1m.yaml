@@ -1,0 +1,9 @@
+name: local_1m
+cache_dir: /tmp/gym_trade
+cache_save: false
+interval: 1m
+symbol: [^DJI]
+start: 1970-01-01
+end: null
+force_download: false
+local_data_dir: ./gym_trade/asset/mini_minute_data/

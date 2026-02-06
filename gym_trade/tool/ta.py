@@ -7,6 +7,7 @@ from typing import Tuple, Dict
 import random
 
 def make_ta_all_safe(dfs: list[pd.DataFrame], ta_dicts: dict[str, dict]): 
+    print("building ta ..")
     return assert_no_lookahead(
         dfs=dfs,
         ta_dict=ta_dicts,

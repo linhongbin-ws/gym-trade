@@ -2,7 +2,7 @@ import yfinance as yf
 import os
 import pandas as pd
 from pathlib import Path
-from gym_trade.tool.preprocess import fill_missing_frame, standardlize_df
+from gym_trade.tool.preprocess import standardlize_df
 
 def load_data(
             data_api: str = "yfinance",
@@ -11,8 +11,10 @@ def load_data(
             start: str | None = None,
             end: str | None = None,
             symbols: list[str] = [],
-            cache_dir: str = "/tmp/gym_trade",
+            cache_dir: str | None = "/tmp/gym_trade",
+            cache_save: bool = True,
             force_download: bool = False,
+            local_data_dir: str | None = None,
             ) -> list[pd.DataFrame]:
     if proxy is not None:
         os.environ['HTTP_PROXY'] = proxy
@@ -29,6 +31,7 @@ def load_data(
         cache_name = f"{symbol}_{s_n}_{e_n}.csv"
         cache_file =cache_csv_dir /  cache_name
         if  cache_file.exists() and not force_download: 
+            print(f"loading {symbol} from {cache_file}")
             df = pd.read_csv(str(cache_file))
             df.set_index('Date', inplace=True)
         elif data_api == 'yfinance':
@@ -46,7 +49,11 @@ def load_data(
 
 
             assert len(df.index) > 0, f"no data found for {symbol} from {start} to {end}, might be proxy {proxy} is not working"
-            df.to_csv(str(cache_file))
+            if cache_save:
+                df.to_csv(str(cache_file))
+        
+        elif data_api == 'local_1m':
+            pass
         else:
             raise NotImplementedError
         # print(df)
