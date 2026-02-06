@@ -55,6 +55,16 @@ def gen_stat(key,values):
 
     return stat
 
+
+def df_generator(df_list):
+    loop_id = 0
+    while True:
+        for df in df_list:
+            yield df, loop_id
+        loop_id +=1
+
+
+
 def deal_with_best_pnl(best_pnl_stat: dict, result_list: list,  pbar_search: tqdm, save_result_dir: Path, file_name: str):
     pnl_stat = {}
     pnl_stat.update(gen_stat("pnl", np.array([result.pnl for result in result_list])))
@@ -134,8 +144,8 @@ def make_ta_features(cfg: DictConfig, dfs: list[pd.DataFrame]) -> pd.DataFrame:
 @dataclass
 class BTRequest:
     policy_hyper_param: dict
-    id: str
     df: pd.DataFrame
+    param_id: int
 
 
 @dataclass
@@ -143,9 +153,9 @@ class BTResult:
     pnl: float
     policy_hyper_param: dict
     pos_chg: int
-    id: str
     hold_t: int
     total_t: int
+    param_id: int
 
 
 def bt_rollout(request: BTRequest, policy, env: PaperTrade, stop_event=None):
@@ -176,7 +186,7 @@ def bt_rollout(request: BTRequest, policy, env: PaperTrade, stop_event=None):
         pnl=env.pnl,
         policy_hyper_param=policy.hyper_param,
         pos_chg=pos_chg,
-        id=request.id,
+        param_id=request.param_id,
         hold_t=hold_cnt,
         total_t=total_t,
     )
@@ -293,57 +303,91 @@ class BTServer:
             position=0
         )
 
-        for search_idx in range(self._cfg.mode.search_num):
-            # for df_idx in range(len(df_list)):
-            pbar_df = tqdm(
-                total=len(df_list),
-                desc="DF",
-                position=1,
-                leave=False   # 内层结束自动消失（更干净）
-            )
-            def df_generator(df_list):
-                it = iter(df_list)
-                prev = next(it)
-                for current in it:
-                    yield prev, False
-                    prev = current
-                yield prev, True
-            
-            df_gen = df_generator(df_list)
-            
-            policy_hyper_param = policy.randomize_hyper_param(
-                        random_type=self._cfg.mode.hyper_search
-                    )
-            is_last = False
-            result_list = []
-            pbar_df.reset()
-            while (
+       
+        # for df_idx in range(len(df_list)):
+        pbar_df = tqdm(
+            total=len(df_list),
+            desc="DF",
+            position=1,
+            leave=False   # 内层结束自动消失（更干净）
+        )
+        df_gen = df_generator(df_list)
+        result_dict = {i: [] for i in range(self._cfg.mode.search_num)}
+        policy_params = [policy.randomize_hyper_param(
+                        random_type=self._cfg.mode.hyper_search) for i in range(self._cfg.mode.search_num)]
+        stop_gen =False
+        while(
                 not self._stop_event.is_set() 
-                and pbar_df.n < len(df_list)
+                and pbar_search.n < self._cfg.mode.search_num
             ):
-                if not self._request_queue.full() and not is_last:
-                    try:
-                        df, is_last = next(df_gen)
-                    except StopIteration:
-                        break
+
+
+            if not self._request_queue.full() and not stop_gen:
+                
+                df, param_id = next(df_gen)
+                if param_id < self._cfg.mode.search_num:
                     request = BTRequest(
-                        policy_hyper_param=policy_hyper_param, id=str(uuid.uuid4()), df=df
+                        policy_hyper_param=policy_params[param_id], param_id=param_id, df=df
                     )
                     self._request_queue.put(request)
+                else:
+                    stop_gen = True
 
-                if not self._result_queue.empty():
-                    try:
-                        result = self._result_queue.get(
-                            timeout=0.5
-                        )  # 定期醒来检查 stop_event
-                        pbar_df.update(1)
-                        result_list.append(result)
-                    except QEmpty:
-                        continue
+            if not self._result_queue.empty():
+                try:
+                    result = self._result_queue.get(
+                        timeout=0.5
+                    )  # 定期醒来检查 stop_event
+          
+                    result_dict[result.param_id].append(result)
+                except QEmpty:
+                    pass
             
-            assert len(result_list)!=0
-            best_pnl_stat = deal_with_best_pnl(best_pnl_stat, result_list, pbar_search, self._cfg.mode.save_result_dir, file_name)
-            pbar_search.update(1)
+
+            now_search_idx = pbar_search.n
+            current = len(result_dict[now_search_idx])
+
+            if current == len(df_list):
+                best_pnl_stat = deal_with_best_pnl(
+                    best_pnl_stat,
+                    result_dict[now_search_idx],
+                    pbar_search,
+                    self._cfg.mode.save_result_dir,
+                    file_name
+                )
+
+                result_dict.pop(now_search_idx)
+
+                pbar_search.update(1)
+                pbar_df.reset()
+
+            elif current < len(df_list):
+                delta = current - pbar_df.n
+                if delta > 0:
+                    pbar_df.update(delta)
+
+            else:
+                raise ValueError(...)
+
+
+
+
+
+
+
+
+            # update_id = None
+            # for k,v in result_dict.items():
+            #     assert len(v) <= len(df_list)
+            #     if len(v) == len(df_list):
+            #         update_id = k
+
+                    
+            # if update_id is not None:
+            #     best_pnl_stat = deal_with_best_pnl(best_pnl_stat, result_dict[update_id], pbar_search, self._cfg.mode.save_result_dir, file_name)
+            #     pbar_search.update(1)
+            #     result_dict.pop(update_id)
+
 
 
 
