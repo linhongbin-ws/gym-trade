@@ -336,7 +336,7 @@ class BTServer:
             if not self._result_queue.empty():
                 try:
                     result = self._result_queue.get(
-                        timeout=0.5
+                        timeout=0.01
                     )  # 定期醒来检查 stop_event
           
                     result_dict[result.param_id].append(result)
