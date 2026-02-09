@@ -14,4 +14,5 @@ general:
   use_cache: false
   cache_dir: /tmp/gym_trade
   no_vis: false
+  future_check: true # if false will make ta faster
 

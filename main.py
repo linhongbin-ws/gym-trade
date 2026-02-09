@@ -33,7 +33,7 @@ import pandas as pd
 from omegaconf import DictConfig, OmegaConf
 import hydra
 import random
-from gym_trade.tool.ta import make_ta_all_safe
+from gym_trade.tool.ta import make_ta_all_safe, make_ta_all
 from gym_trade.env.embodied import PaperTrade
 from datetime import datetime
 from pathlib import Path
@@ -41,7 +41,6 @@ from gym_trade.policy.registry import POLICY_REGISTRY
 from tqdm import tqdm
 import yaml
 from queue import Empty as QEmpty
-import uuid
 import multiprocessing as mp
 from typing import Any
 
@@ -137,7 +136,10 @@ def make_ta_features(cfg: DictConfig, dfs: list[pd.DataFrame]) -> pd.DataFrame:
     OmegaConf.set_struct(cfg, True)
 
     ta_dict = {k: v for k, v in cfg.ta.items() if k in cfg.policy.ta_select_keys}
-    _dfs, col_range_dict = make_ta_all_safe(dfs, ta_dict)
+    if cfg.general.future_check:
+        _dfs, col_range_dict = make_ta_all_safe(dfs, ta_dict)
+    else:
+        _dfs, col_range_dict = make_ta_all(dfs, ta_dict)
     return _dfs, col_range_dict
 
 
@@ -372,65 +374,6 @@ class BTServer:
 
 
 
-
-
-
-
-            # update_id = None
-            # for k,v in result_dict.items():
-            #     assert len(v) <= len(df_list)
-            #     if len(v) == len(df_list):
-            #         update_id = k
-
-                    
-            # if update_id is not None:
-            #     best_pnl_stat = deal_with_best_pnl(best_pnl_stat, result_dict[update_id], pbar_search, self._cfg.mode.save_result_dir, file_name)
-            #     pbar_search.update(1)
-            #     result_dict.pop(update_id)
-
-
-
-
-                # if self._n_workers == 1:
-                #     policy_cls = POLICY_REGISTRY[self._policy_name]
-                #     policy = policy_cls(**self._policy_args)
-                #     env = PaperTrade(df_list=self._df_list, **self._env_args)
-                #     for i in range(self._cfg.mode.search_num):
-                #         policy_hyper_param = policy.randomize_hyper_param(
-                #             random_type=self._cfg.mode.hyper_search
-                #         )
-                #         request = BTRequest(
-                #             policy_hyper_param=policy_hyper_param, id=str(uuid.uuid4())
-                #         )
-                #         result = bt_rollout(request, policy, env, stop_event=None)
-                #         pbar_search.update(1)
-                #         best_pnl_stat = deal_with_best_pnl(best_pnl_stat, result)
-                # else:
-                #     while (
-                #         not self._stop_event.is_set()
-                #         and pbar_search.n <= self._cfg.mode.search_num
-                #     ):
-                #         if not self._request_queue.full():
-                #             policy_hyper_param = policy.randomize_hyper_param(
-                #                 random_type=self._cfg.mode.hyper_search
-                #             )
-                #             request = BTRequest(
-                #                 policy_hyper_param=policy_hyper_param, id=str(uuid.uuid4())
-                #             )
-                #             self._request_queue.put(request)
-
-                #         if not self._result_queue.empty():
-                #             try:
-                #                 result = self._result_queue.get(
-                #                     timeout=0.5
-                #                 )  # 定期醒来检查 stop_event
-                #                 pbar_search.update(1)
-                #             except QEmpty:
-                #                 continue
-                #             best_pnl_stat = deal_with_best_pnl(best_pnl_stat, result)
-
-
-
 def bt(cfg: DictConfig, df_list: list[pd.DataFrame], col_range_dict: dict) -> None:
     _df_list = []
     for df in df_list:
@@ -482,9 +425,10 @@ def vis_lightweight_chart_df(
     _df = df[["close", "open", "high", "low", "volume"]]
     _df["time"] = df.index
     chart.set(_df)
-    random_color = lambda: (
-        f"rgba({random.randint(100, 255)}, {random.randint(100, 255)}, {random.randint(100, 255)}, 0.9)"
-    )
+    def random_color():
+            return f"rgba({random.randint(100, 255)}, {random.randint(100, 255)}, {random.randint(100, 255)}, 0.9)"
+    
+
 
     lines = {}
 
