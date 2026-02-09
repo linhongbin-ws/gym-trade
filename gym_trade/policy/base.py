@@ -28,7 +28,8 @@ class BasePolicy(ABC):
     @abstractmethod
     def __call__(self, obs, **kwargs):
         action = 0
-        return action
+        info = {"entry_point": False, "exit_point": False}
+        return action, info
     
     @property
     @abstractmethod

@@ -55,11 +55,11 @@ def gen_stat(key,values):
     return stat
 
 
-def df_generator(df_list):
+def df_generator(dfs: dict[str, pd.DataFrame]):
     loop_id = 0
     while True:
-        for df in df_list:
-            yield df, loop_id
+        for k, df in dfs.items():
+            yield k,df, loop_id
         loop_id +=1
 
 
@@ -109,7 +109,7 @@ def to_python(obj):
         return obj
 
 
-def load_data(cfg: DictConfig) -> list[pd.DataFrame]:
+def load_data(cfg: DictConfig) -> dict[str, pd.DataFrame]:
     dfs = load_data_func(
         data_api=cfg.data.name,
         proxy=cfg.general.proxy,
@@ -123,7 +123,7 @@ def load_data(cfg: DictConfig) -> list[pd.DataFrame]:
     return dfs
 
 
-def make_ta_features(cfg: DictConfig, dfs: list[pd.DataFrame]) -> pd.DataFrame:
+def make_ta_features(cfg: DictConfig, dfs: dict[str, pd.DataFrame]) -> dict[str, pd.DataFrame]:
 
     # merge cfg ta_xxx to ta
     OmegaConf.set_struct(cfg, False)
@@ -148,6 +148,7 @@ class BTRequest:
     policy_hyper_param: dict
     df: pd.DataFrame
     param_id: int
+    df_name: str
 
 
 @dataclass
@@ -158,6 +159,9 @@ class BTResult:
     hold_t: int
     total_t: int
     param_id: int
+    entry_dates: list[pd.DatetimeIndex]
+    exit_dates: list[pd.DatetimeIndex]
+    df_name: str
 
 
 def bt_rollout(request: BTRequest, policy, env: PaperTrade, stop_event=None):
@@ -169,12 +173,18 @@ def bt_rollout(request: BTRequest, policy, env: PaperTrade, stop_event=None):
     pos_chg = 0
     hold_cnt = 0
     total_t = 0
+    entry_dates = []
+    exit_dates = []
     while not done:
         if stop_event is not None:
             if stop_event.is_set():
                 break
         total_t += 1
-        action = policy(obs)
+        action, action_info = policy(obs)
+        if action_info["entry_point"]:
+            entry_dates.append(env._t)
+        if action_info["exit_point"]:
+            exit_dates.append(env._t)
         obs, reward, done, info = env.step(action)
         if obs["dash@pos"] != pos_prv:
             pos_chg += 1
@@ -191,6 +201,9 @@ def bt_rollout(request: BTRequest, policy, env: PaperTrade, stop_event=None):
         param_id=request.param_id,
         hold_t=hold_cnt,
         total_t=total_t,
+        entry_dates=entry_dates,
+        exit_dates=exit_dates,
+        df_name=request.df_name,
     )
     return result
 
@@ -208,7 +221,7 @@ def bt_server_loop(
         except QEmpty:
             continue
         if request is not None:
-            env = PaperTrade(df_list=[request.df], **env_args)
+            env = PaperTrade(df = request.df, **env_args)
             result = bt_rollout(request, policy, env, stop_event)
             result_queue.put(result)
 
@@ -289,7 +302,7 @@ class BTServer:
         self.shutdown()
         return False
 
-    def backtest(self, df_list: list[pd.DataFrame]):
+    def backtest(self, dfs: dict[str, pd.DataFrame]):
 
         policy_cls = POLICY_REGISTRY[self._cfg.policy.name]
         policy = policy_cls(**self._policy_args)
@@ -308,12 +321,12 @@ class BTServer:
        
         # for df_idx in range(len(df_list)):
         pbar_df = tqdm(
-            total=len(df_list),
+            total=len(dfs),
             desc="DF",
             position=1,
             leave=False   # 内层结束自动消失（更干净）
         )
-        df_gen = df_generator(df_list)
+        df_gen = df_generator(dfs)
         result_dict = {i: [] for i in range(self._cfg.mode.search_num)}
         policy_params = [policy.randomize_hyper_param(
                         random_type=self._cfg.mode.hyper_search) for i in range(self._cfg.mode.search_num)]
@@ -326,10 +339,10 @@ class BTServer:
 
             if not self._request_queue.full() and not stop_gen:
                 
-                df, param_id = next(df_gen)
+                df_name,df, param_id = next(df_gen)
                 if param_id < self._cfg.mode.search_num:
                     request = BTRequest(
-                        policy_hyper_param=policy_params[param_id], param_id=param_id, df=df
+                        policy_hyper_param=policy_params[param_id], param_id=param_id, df=df, df_name=df_name
                     )
                     self._request_queue.put(request)
                 else:
@@ -349,7 +362,7 @@ class BTServer:
             now_search_idx = pbar_search.n
             current = len(result_dict[now_search_idx])
 
-            if current == len(df_list):
+            if current == len(dfs):
                 best_pnl_stat = deal_with_best_pnl(
                     best_pnl_stat,
                     result_dict[now_search_idx],
@@ -363,7 +376,7 @@ class BTServer:
                 pbar_search.update(1)
                 pbar_df.reset()
 
-            elif current < len(df_list):
+            elif current < len(dfs):
                 delta = current - pbar_df.n
                 if delta > 0:
                     pbar_df.update(delta)
@@ -374,48 +387,11 @@ class BTServer:
 
 
 
-def bt(cfg: DictConfig, df_list: list[pd.DataFrame], col_range_dict: dict) -> None:
-    _df_list = []
-    for df in df_list:
-        if cfg.mode.start is not None:
-            date = datetime.strptime(cfg.mode.start, "%Y-%m-%d")
-            if cfg.data.interval == "1m":
-                date = date.replace(hour=9, minute=30)
-
-            df = df.truncate(before=date)
-        if cfg.mode.end is not None:
-            date = datetime.strptime(cfg.mode.end, "%Y-%m-%d")
-            if cfg.data.interval == "1m":
-                date = date.replace(hour=4, minute=00)
-            df = df.truncate(after=date)
-        _df_list.append(df)
-
-    # create policy
-    print(f"avaliable poliy {POLICY_REGISTRY.keys()}")
-    policy_cls = POLICY_REGISTRY[cfg.policy.name]
-    policy_args = {k: v for k, v in cfg.policy.items() if k not in ["name"]}
-    policy = policy_cls(**policy_args)
-
-    # create env
-    env_args = OmegaConf.to_container(cfg.env, resolve=True)  # to dict
-    env_args = {k: v for k, v in env_args.items() if k not in ["name", "start", "end"]}
-    env_args["obs_keys"] = policy.obs_keys
-    env_args["interval"] = cfg.data.interval
-    env_args["col_range_dict"] = col_range_dict
-
-    server = BTServer(
-        cfg=cfg,
-        policy_name=cfg.policy.name,
-        policy_args=policy_args,
-        env_args=env_args,
-    )
-    server.backtest(df_list)
-    server.shutdown()
-
-
-
 def vis_lightweight_chart_df(
-    df,
+    df: pd.DataFrame,
+    df_name: str,
+    entry_dates: list[pd.DatetimeIndex],
+    exit_dates: list[pd.DatetimeIndex],
     mainchart_keys: list[str] = [],
     subchart_keys: list[str] = [],
     mainchart_height: float = 0.6,
@@ -455,14 +431,69 @@ def vis_lightweight_chart_df(
         line_df = pd.DataFrame({"time": df.index, k: df[k]})
         # line_df = line_df.dropna()
         lines[k].set(line_df)
+    
+    for entry_date in entry_dates:
+        chart.marker(text=f"B: {entry_date}", time=entry_date)
+    for exit_date in exit_dates:
+        chart.marker(text=f"S: {exit_date}", time=exit_date)
 
     chart.show(block=True)
 
 
-def vis(cfg: DictConfig, df_list: list[pd.DataFrame]) -> None:
-    for df in df_list:
+def bt_mode(cfg: DictConfig, dfs: dict[str, pd.DataFrame], col_range_dict: dict) -> None:
+
+    # create policy
+    print(f"avaliable poliy {POLICY_REGISTRY.keys()}")
+    policy_cls = POLICY_REGISTRY[cfg.policy.name]
+    policy_args = {k: v for k, v in cfg.policy.items() if k not in ["name"]}
+    policy = policy_cls(**policy_args)
+
+    # create env
+    env_args = OmegaConf.to_container(cfg.env, resolve=True)  # to dict
+    env_args = {k: v for k, v in env_args.items() if k not in ["name", "start", "end"]}
+    env_args["obs_keys"] = policy.obs_keys
+    env_args["interval"] = cfg.data.interval
+    env_args["col_range_dict"] = col_range_dict
+
+    server = BTServer(
+        cfg=cfg,
+        policy_name=cfg.policy.name,
+        policy_args=policy_args,
+        env_args=env_args,
+    )
+    server.backtest(dfs)
+    server.shutdown()
+
+
+def vis_mode(cfg: DictConfig, dfs: dict[str, pd.DataFrame], col_range_dict: dict) -> None:
+    
+    for df_name, df in dfs.items():
+        policy_cls = POLICY_REGISTRY[cfg.policy.name]
+        policy_args = {k: v for k, v in cfg.policy.items() if k not in ["name"]}
+        policy = policy_cls(**policy_args)
+        env_args = OmegaConf.to_container(cfg.env, resolve=True)  # to dict
+        env_args = {k: v for k, v in env_args.items() if k not in ["name", "start", "end"]}
+        env_args["obs_keys"] = policy.obs_keys
+        env_args["interval"] = cfg.data.interval
+        env_args["col_range_dict"] = col_range_dict
+        env = PaperTrade(df =df, **env_args)
+        obs = env.reset()
+        done = False
+        entry_dates = []
+        exit_dates = []
+        while not done:
+            action, action_info = policy(obs)
+            obs, reward, done, info = env.step(action)
+            if action_info["entry_point"]:
+                entry_dates.append(env._t)
+            if action_info["exit_point"]:
+                exit_dates.append(env._t)
+
         vis_lightweight_chart_df(
-            df,
+            df=df,
+            df_name=df_name,
+            entry_dates=entry_dates,
+            exit_dates=exit_dates,
             mainchart_keys=cfg.gui.mainchart_keys,
             subchart_keys=cfg.gui.subchart_keys,
             mainchart_height=cfg.gui.mainchart_height,
@@ -475,9 +506,9 @@ def main(cfg: DictConfig) -> None:
     dfs = load_data(cfg)
     dfs, col_range_dict = make_ta_features(cfg, dfs)
     if cfg.mode.name == "vis":
-        vis(cfg, dfs)
+        vis_mode(cfg, dfs, col_range_dict)
     elif cfg.mode.name == "bt":
-        bt(cfg, dfs, col_range_dict)
+        bt_mode(cfg, dfs, col_range_dict)
     else:
         raise NotImplementedError(f"Unsupported mode: {cfg.mode.mode}")
     return None

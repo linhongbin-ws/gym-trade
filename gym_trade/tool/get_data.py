@@ -22,14 +22,14 @@ def load_data(
         print(f"set proxy to {proxy}")
 
 
-    dfs = []
+    dfs = {}
     cache_csv_dir = Path(cache_dir) / interval 
     cache_csv_dir.mkdir(parents=True, exist_ok=True)
     for symbol in symbols:
         s_n = start if start is not None else "smax"
         e_n = end if end is not None else "emax"
-        cache_name = f"{symbol}_{s_n}_{e_n}.csv"
-        cache_file =cache_csv_dir /  cache_name
+        df_name = f"{symbol}_{s_n}_{e_n}"
+        cache_file =cache_csv_dir /  (df_name + ".csv")
         if  cache_file.exists() and not force_download: 
             print(f"loading {symbol} from {cache_file}")
             df = pd.read_csv(str(cache_file))
@@ -57,8 +57,22 @@ def load_data(
         else:
             raise NotImplementedError
         # print(df)
+
+
+        # if cfg.mode.start is not None:
+        #     date = datetime.strptime(cfg.mode.start, "%Y-%m-%d")
+        #     if cfg.data.interval == "1m":
+        #         date = date.replace(hour=9, minute=30)
+
+        #     df = df.truncate(before=date)
+        # if cfg.mode.end is not None:
+        #     date = datetime.strptime(cfg.mode.end, "%Y-%m-%d")
+        #     if cfg.data.interval == "1m":
+        #         date = date.replace(hour=4, minute=00)
+        #     df = df.truncate(after=date)
+        # _dfs[k] = df
         df = standardlize_df(df) 
-        dfs.append(df)
+        dfs[df_name] =  df
     return dfs
 
 if __name__ == "__main__":

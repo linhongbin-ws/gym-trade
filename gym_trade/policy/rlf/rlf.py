@@ -75,14 +75,14 @@ class Policy(BasePolicy):
             # 空仓：优先用“初次入场”，否则用“回补入场”
             self._exit_count = 0
             if enter_fresh or enter_reentry:
-                return np.array([1,1])
-            return np.array([0,0])
+                return np.array([1,1]), {"entry_point": True, "exit_point": False}
+            return np.array([0,0]), {"entry_point": False, "exit_point": False}
 
         # pos > 0：持仓
         # 最小持仓期内不卖（减少被洗下车的机会成本）
         if self._hold_steps < int(self.hyper_param["min_hold_steps"]):
             self._exit_count = 0
-            return  np.array([0,0])
+            return  np.array([0,0]), {"entry_point": False, "exit_point": False}
 
         # 连续确认退出
         if exit_raw:
@@ -95,9 +95,9 @@ class Policy(BasePolicy):
             # 卖出后进入冷却
             self._cooldown = int(self.hyper_param["cooldown_steps"])
             self._exit_count = 0
-            return np.array([1,0])
+            return np.array([1,0]), {"entry_point": False, "exit_point": True}
 
-        return  np.array([0,0])
+        return  np.array([0,0]), {"entry_point": False, "exit_point": False}
 
     @property
     def obs_keys(self):

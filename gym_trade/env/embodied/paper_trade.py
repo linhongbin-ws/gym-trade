@@ -1,16 +1,14 @@
 import gym
 import pandas as pd
 import numpy as np
-from os.path import isfile
-from typing import List, Union
-import pathlib
+from typing import List
 from gym_trade.env.embodied.base import BaseEnv
 from gym.utils import seeding
 
 
 class PaperTrade(BaseEnv):
     def __init__(self, 
-                    df_list: List[pd.DataFrame] , # list of csv file names or list of df 
+                    df: pd.DataFrame , # list of csv file names or list of df 
                     interval: str,
                     obs_keys: List[str] = ["position_ratio","open","close","high","low"],
                     init_balance: float =  1e6,
@@ -28,7 +26,7 @@ class PaperTrade(BaseEnv):
 
         assert interval in ["1d", "1m"], f"interval {interval} not supported in paper trade"
         assert action_on in ["close_t_minus_1", "open_t"], action_on
-        self._df_list = df_list
+        self._df = df.copy()
         self._interval = interval
         self._obs_keys = obs_keys
         self._init_balance = init_balance
@@ -175,12 +173,6 @@ class PaperTrade(BaseEnv):
         call each reset() or init()
         """
         self._t = 0
-
-        # randomize df index for each init
-        self._df_idx = 0 if len(self._df_list)==1 else self._rng_csv_idx.randint(0, len(self._df_list)-1) 
-        self._df = self._df_list[ self._df_idx].copy()
-
-
         self._df["action"] = np.nan
 
         # create dash columns

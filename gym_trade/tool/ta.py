@@ -6,7 +6,7 @@ import traceback
 from typing import Tuple, Dict
 import random
 
-def make_ta_all_safe(dfs: list[pd.DataFrame], ta_dicts: dict[str, dict]): 
+def make_ta_all_safe(dfs: dict[str, pd.DataFrame], ta_dicts: dict[str, dict]): 
     print("building ta ..")
     return assert_no_lookahead(
         dfs=dfs,
@@ -16,10 +16,10 @@ def make_ta_all_safe(dfs: list[pd.DataFrame], ta_dicts: dict[str, dict]):
         n_samples=None,   # or None for full scan
     )
 
-def make_ta_all(dfs: list[pd.DataFrame], ta_dicts: dict[str, dict]):
-    _dfs = []
+def make_ta_all(dfs: dict[str, pd.DataFrame], ta_dicts: dict[str, dict]):
+    _dfs = {}
     unfinish_dict =  ta_dicts
-    for df in dfs:
+    for k, df in dfs.items():
         # unfinish_dict = {k: v for k,v in cfg.ta.items() if k in cfg.policy.ta_select_keys}
         ta_len_prv = len(unfinish_dict.keys()) + 1
         col_range_dict = None
@@ -28,7 +28,7 @@ def make_ta_all(dfs: list[pd.DataFrame], ta_dicts: dict[str, dict]):
             ta_len_prv = len(unfinish_dict.keys())
         assert len(unfinish_dict.keys()) == 0, f"unfinish ta {unfinish_dict.keys()} "
         df['index_datetime'] = df.index.values
-        _dfs.append(df)
+        _dfs[k] = df
     return _dfs, col_range_dict
     
 
