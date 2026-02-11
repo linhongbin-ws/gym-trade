@@ -4,7 +4,7 @@ import time
 from lightweight_charts import Chart
 from pynput import keyboard
 from pynput.keyboard import Key
-
+from threading import Lock
 
 class ChartMod(Chart):
     def __init__(self, **kwargs):
@@ -16,12 +16,19 @@ class ChartMod(Chart):
             daemon=True
         )
         self._keyboard.start()
+        self._lock = Lock()
+        self.press_n = False
 
     def on_key(self, key):
         if key == Key.esc:
             print("ESC pressed → force exit")
             self._exit_now = True
             self._keyboard.stop()
+        elif key.char == 'n':
+            print("n pressed")
+            with self._lock:
+                self.press_n = True
+
 
     def maybe_exit(self):
         if self._exit_now:

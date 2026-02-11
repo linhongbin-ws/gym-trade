@@ -18,8 +18,8 @@ def make_ta_all_safe(dfs: dict[str, pd.DataFrame], ta_dicts: dict[str, dict]):
 
 def make_ta_all(dfs: dict[str, pd.DataFrame], ta_dicts: dict[str, dict]):
     _dfs = {}
-    unfinish_dict =  ta_dicts
     for k, df in dfs.items():
+        unfinish_dict =  ta_dicts
         # unfinish_dict = {k: v for k,v in cfg.ta.items() if k in cfg.policy.ta_select_keys}
         ta_len_prv = len(unfinish_dict.keys()) + 1
         col_range_dict = None
@@ -50,7 +50,8 @@ def make_ta(df: pd.DataFrame, ta_dict_dict: dict[str, dict], col_range_dict: dic
         call = globals()[func]
         args = {k: v for k, v in ta_arg_dict.items() if k != 'func' }
         try:
-            args['key_range'] = col_range_dict[args['key']]
+            if 'key' in args:
+                args['key_range'] = col_range_dict[args['key']]
             ta_results, ta_ranges = call(df, **args)
         except Exception:
             traceback.print_exc()
@@ -438,6 +439,113 @@ def volume_features(
 
     return pd.DataFrame(out, index=df.index), out_range
 
+
+
+
+
+
+def accumulation_features(
+    df: pd.DataFrame,
+    vol_window: int = 20,
+    atr_window: int = 14,
+    range_window: int = 20,
+):
+    """
+    Big buyer / accumulation related features (daily, OHLCV only)
+
+    Outputs:
+        - accumulation_score
+        - lower_wick_ratio
+        - up_down_vol_ratio
+    """
+
+    out_range: Dict[str, list] = {
+        "accumulation_score": [0, 5],
+        "lower_wick_ratio": [0, 1],
+        "up_down_vol_ratio": [0, np.inf],
+    }
+
+    # -------------------------
+    # 1. Lower wick ratio
+    # -------------------------
+    open_ = df["open"].to_numpy(dtype=float)
+    high = df["high"].to_numpy(dtype=float)
+    low = df["low"].to_numpy(dtype=float)
+    close = df["close"].to_numpy(dtype=float)
+
+    lower_wick = np.minimum(open_, close) - low
+    total_range = high - low
+    lower_wick_ratio = np.divide(
+        lower_wick,
+        total_range,
+        out=np.full_like(lower_wick, np.nan),
+        where=total_range > 0,
+    )
+
+    # -------------------------
+    # 2. Up / Down volume ratio
+    # -------------------------
+    volume = df["volume"].to_numpy(dtype=float)
+
+    up_mask = close > open_
+    down_mask = close < open_
+
+    up_vol = np.where(up_mask, volume, 0.0)
+    down_vol = np.where(down_mask, volume, 0.0)
+
+    avg_up_vol = pd.Series(up_vol).rolling(vol_window).mean().to_numpy()
+    avg_down_vol = pd.Series(down_vol).rolling(vol_window).mean().to_numpy()
+
+    up_down_vol_ratio = np.divide(
+        avg_up_vol,
+        avg_down_vol,
+        out=np.full_like(avg_up_vol, np.nan),
+        where=avg_down_vol > 0,
+    )
+
+    # -------------------------
+    # 3. Absorption: high volume + small body
+    # -------------------------
+    body = np.abs(close - open_)
+
+    # ATR (inline, not exported)
+    tr = np.maximum.reduce([
+        high - low,
+        np.abs(high - np.roll(close, 1)),
+        np.abs(low - np.roll(close, 1)),
+    ])
+    tr[0] = np.nan
+    atr = pd.Series(tr).rolling(atr_window).mean().to_numpy()
+
+    avg_vol = pd.Series(volume).rolling(vol_window).mean().to_numpy()
+    high_volume = volume > 1.5 * avg_vol
+    small_body = body < 0.5 * atr
+    absorption = high_volume & small_body
+
+    # -------------------------
+    # 4. Range compression
+    # -------------------------
+    daily_range = high - low
+    avg_range = pd.Series(daily_range).rolling(range_window).mean().to_numpy()
+    range_compression = avg_range < np.roll(avg_range, 5)
+
+    # -------------------------
+    # 5. Accumulation score
+    # -------------------------
+    accumulation_score = (
+        absorption.astype(int) +
+        (lower_wick_ratio > 0.4).astype(int) +
+        (up_down_vol_ratio > 1.2).astype(int) +
+        range_compression.astype(int)
+    )
+
+    out = {
+        "accumulation_score": accumulation_score,
+        "lower_wick_ratio": lower_wick_ratio,
+        "up_down_vol_ratio": up_down_vol_ratio,
+    }
+
+    return pd.DataFrame(out, index=df.index), out_range
 
 
 

@@ -187,7 +187,7 @@ class PaperTrade(BaseEnv):
 
         # check if obs key exist
         for k in self._obs_keys:
-            assert k in self._df.columns, f"obs key {k} is not in dataframe"
+            assert k in self._df.columns, f"obs key {k} is not in dataframe, columns: {self._df.columns}"
 
     def _get_info(self):
         return {}

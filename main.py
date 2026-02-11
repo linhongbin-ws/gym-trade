@@ -27,7 +27,7 @@ with suppress_output():
 
 from dataclasses import dataclass
 from gym_trade.tool.get_data import load_data as load_data_func
-from lightweight_charts import Chart
+from gym_trade.tool.lw_chart import ChartMod as Chart
 import numpy as np
 import pandas as pd
 from omegaconf import DictConfig, OmegaConf
@@ -388,6 +388,7 @@ class BTServer:
 
 
 def vis_lightweight_chart_df(
+    chart: Chart,
     df: pd.DataFrame,
     df_name: str,
     entry_dates: list[pd.DatetimeIndex],
@@ -396,8 +397,7 @@ def vis_lightweight_chart_df(
     subchart_keys: list[str] = [],
     mainchart_height: float = 0.6,
 ):
-    chart = Chart(toolbox=True, inner_width=1, inner_height=mainchart_height)
-    chart.candle_style(down_color="#00ff55", up_color="#ed4807")
+
     _df = df[["close", "open", "high", "low", "volume"]]
     _df["time"] = df.index
     chart.set(_df)
@@ -431,13 +431,18 @@ def vis_lightweight_chart_df(
         line_df = pd.DataFrame({"time": df.index, k: df[k]})
         # line_df = line_df.dropna()
         lines[k].set(line_df)
-    
-    for entry_date in entry_dates:
-        chart.marker(text=f"B: {entry_date}", time=entry_date)
-    for exit_date in exit_dates:
-        chart.marker(text=f"S: {exit_date}", time=exit_date)
 
-    chart.show(block=True)
+    # assert False, entry_dates
+    for entry_date in entry_dates:
+        chart.marker(text="B", time=entry_date)
+    for exit_date in exit_dates:
+        chart.marker(text="S", time=exit_date)
+
+    chart.show(block=False)
+    chart.press_n = False
+    while True:
+        if chart.press_n:
+            break
 
 
 def bt_mode(cfg: DictConfig, dfs: dict[str, pd.DataFrame], col_range_dict: dict) -> None:
@@ -467,6 +472,8 @@ def bt_mode(cfg: DictConfig, dfs: dict[str, pd.DataFrame], col_range_dict: dict)
 
 def vis_mode(cfg: DictConfig, dfs: dict[str, pd.DataFrame], col_range_dict: dict) -> None:
     
+    chart = Chart(toolbox=True, inner_width=1, inner_height=cfg.gui.mainchart_height)
+    chart.candle_style(down_color="#00ff55", up_color="#ed4807")
     for df_name, df in dfs.items():
         policy_cls = POLICY_REGISTRY[cfg.policy.name]
         policy_args = {k: v for k, v in cfg.policy.items() if k not in ["name"]}
@@ -481,15 +488,19 @@ def vis_mode(cfg: DictConfig, dfs: dict[str, pd.DataFrame], col_range_dict: dict
         done = False
         entry_dates = []
         exit_dates = []
+        param  = policy.randomize_hyper_param(random_type=cfg.mode.hyper_search)
+        policy.set_hyper_param(param)
+        policy.init_policy()
         while not done:
             action, action_info = policy(obs)
             obs, reward, done, info = env.step(action)
             if action_info["entry_point"]:
-                entry_dates.append(env._t)
+                entry_dates.append(env.df.index[env._t])
             if action_info["exit_point"]:
-                exit_dates.append(env._t)
+                exit_dates.append(env.df.index[env._t])
 
         vis_lightweight_chart_df(
+            chart=chart,
             df=df,
             df_name=df_name,
             entry_dates=entry_dates,

@@ -1,0 +1,1 @@
+acc: {func: accumulation_features, vol_window: 20, atr_window: 14, range_window: 20, } 

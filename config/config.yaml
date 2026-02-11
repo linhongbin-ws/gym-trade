@@ -4,6 +4,7 @@ defaults:
   - ta@ta_ema: ema
   - ta@ta_rlf: rlf
   - ta@ta_rsi: rsi
+  - ta@ta_acc: acc
   - data: yf
   - policy: dummy
   - env: paper_trade 
