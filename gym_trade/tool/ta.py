@@ -549,6 +549,311 @@ def accumulation_features(
 
 
 
+def accumulation_features_v2(
+    df: pd.DataFrame,
+
+    # ---------- rolling windows ----------
+    vol_window: int = 20,
+    range_window: int = 20,
+    clv_window: int = 5,
+
+    # ---------- price efficiency ----------
+    price_eff_norm_thres: float = 0.7,     # 低于该分位 → price impact 被压制
+
+    # ---------- range / volume regime ----------
+    range_rank_thres: float = 0.3,          # 波动处于历史低位
+    vol_rank_thres: float = 0.5,            # 但成交量不低
+
+    # ---------- close control ----------
+    clv_thres: float = 0.55,                # 收盘偏上
+
+) -> Tuple[pd.DataFrame, Dict[str, list]]:
+    """
+    Accumulation features v2 (fully parameterized)
+
+    Outputs:
+        acc_v2@accumulation_score
+        acc_v2@price_efficiency
+        acc_v2@range_vol_regime
+        acc_v2@clv_mean
+    """
+
+    out_range: Dict[str, list] = {
+        "accumulation_score": [0, 4],
+        "price_efficiency": [0, np.inf],
+        "range_vol_regime": [0, 1],
+        "clv_mean": [0, 1],
+    }
+
+    open_ = df["open"].to_numpy(dtype=float)
+    high = df["high"].to_numpy(dtype=float)
+    low = df["low"].to_numpy(dtype=float)
+    close = df["close"].to_numpy(dtype=float)
+    volume = df["volume"].to_numpy(dtype=float)
+
+    n = len(df)
+
+    # ==================================================
+    # 1. Price efficiency (price impact per volume)
+    # ==================================================
+    body = np.abs(close - open_)
+
+    price_eff = np.divide(
+        body,
+        volume,
+        out=np.full(n, np.nan),
+        where=volume > 0,
+    )
+
+    price_eff_mean = (
+        pd.Series(price_eff)
+        .rolling(vol_window)
+        .mean()
+        .to_numpy()
+    )
+
+    price_eff_norm = np.divide(
+        price_eff,
+        price_eff_mean,
+        out=np.full(n, np.nan),
+        where=price_eff_mean > 0,
+    )
+
+    low_price_eff = price_eff_norm < price_eff_norm_thres
+
+    # ==================================================
+    # 2. Range compression + volume persistence
+    # ==================================================
+    range_pct = np.divide(
+        high - low,
+        close,
+        out=np.full(n, np.nan),
+        where=close > 0,
+    )
+
+    range_rank = (
+        pd.Series(range_pct)
+        .rolling(range_window)
+        .apply(lambda x: pd.Series(x).rank(pct=True).iloc[-1])
+        .to_numpy()
+    )
+
+    vol_rank = (
+        pd.Series(volume)
+        .rolling(range_window)
+        .apply(lambda x: pd.Series(x).rank(pct=True).iloc[-1])
+        .to_numpy()
+    )
+
+    range_vol_regime = (
+        (range_rank < range_rank_thres) &
+        (vol_rank > vol_rank_thres)
+    )
+
+    # ==================================================
+    # 3. Close location value (CLV)
+    # ==================================================
+    clv = np.divide(
+        close - low,
+        high - low,
+        out=np.full(n, np.nan),
+        where=(high - low) > 0,
+    )
+
+    clv_mean = (
+        pd.Series(clv)
+        .rolling(clv_window)
+        .mean()
+        .to_numpy()
+    )
+
+    clv_control = clv_mean > clv_thres
+
+    # ==================================================
+    # 4. Accumulation score (discrete)
+    # ==================================================
+    accumulation_score = (
+        low_price_eff.astype(int) +
+        range_vol_regime.astype(int) +
+        clv_control.astype(int)
+    )
+
+    out = {
+        "accumulation_score": accumulation_score,
+        "price_efficiency": price_eff_norm,
+        "range_vol_regime": range_vol_regime.astype(int),
+        "clv_mean": clv_mean,
+    }
+
+    return pd.DataFrame(out, index=df.index), out_range
+
+
+from typing import Tuple, Dict
+import numpy as np
+import pandas as pd
+
+
+def accumulation_features_v3(
+    df: pd.DataFrame,
+
+    # ---------- base windows ----------
+    vol_window: int = 20,
+    range_window: int = 20,
+    clv_window: int = 5,
+
+    # ---------- institutional behavior ----------
+    persistence_window: int = 10,
+    absorption_window: int = 20,
+    rs_window: int = 20,
+
+    # ---------- thresholds ----------
+    price_eff_norm_thres: float = 0.7,
+    range_rank_thres: float = 0.3,
+    vol_rank_thres: float = 0.5,
+    clv_thres: float = 0.55,
+
+    persistence_thres: float = 2.0,
+    absorption_z_thres: float = 0.5,
+    rs_thres: float = 0.0,
+
+) -> Tuple[pd.DataFrame, Dict[str, list]]:
+    """
+    Institutional accumulation features v3 (OHLCV only)
+
+    Outputs:
+        acc_v3@institutional_score
+        acc_v3@price_efficiency
+        acc_v3@clv_mean
+        acc_v3@persistence
+        acc_v3@absorption_z
+        acc_v3@relative_strength
+    """
+
+    out_range = {
+        "institutional_score": [0, 6],
+        "price_efficiency": [0, np.inf],
+        "clv_mean": [0, 1],
+        "persistence": [0, 6],
+        "absorption_z": [-5, 5],
+        "relative_strength": [-1, 1],
+    }
+
+    open_ = df["open"].to_numpy(float)
+    high = df["high"].to_numpy(float)
+    low = df["low"].to_numpy(float)
+    close = df["close"].to_numpy(float)
+    volume = df["volume"].to_numpy(float)
+
+    n = len(df)
+
+    # ==================================================
+    # 1. Price efficiency suppression
+    # ==================================================
+    body = np.abs(close - open_)
+
+    price_eff = np.divide(
+        body,
+        volume,
+        out=np.full(n, np.nan),
+        where=volume > 0,
+    )
+
+    price_eff_mean = pd.Series(price_eff).rolling(vol_window).mean()
+    price_eff_norm = price_eff / price_eff_mean
+
+    low_price_eff = price_eff_norm < price_eff_norm_thres
+
+    # ==================================================
+    # 2. Range compression + volume persistence
+    # ==================================================
+    range_pct = (high - low) / close
+
+    range_rank = (
+        pd.Series(range_pct)
+        .rolling(range_window)
+        .apply(lambda x: pd.Series(x).rank(pct=True).iloc[-1])
+    )
+
+    vol_rank = (
+        pd.Series(volume)
+        .rolling(range_window)
+        .apply(lambda x: pd.Series(x).rank(pct=True).iloc[-1])
+    )
+
+    range_vol_regime = (
+        (range_rank < range_rank_thres) &
+        (vol_rank > vol_rank_thres)
+    )
+
+    # ==================================================
+    # 3. Close control
+    # ==================================================
+    clv = (close - low) / (high - low)
+    clv_mean = pd.Series(clv).rolling(clv_window).mean()
+    clv_control = clv_mean > clv_thres
+
+    # ==================================================
+    # 4. Base accumulation score (v2 core)
+    # ==================================================
+    base_score = (
+        low_price_eff.astype(int) +
+        range_vol_regime.astype(int) +
+        clv_control.astype(int)
+    )
+
+    # ==================================================
+    # 5. Persistence (institution must be continuous)
+    # ==================================================
+    persistence = pd.Series(base_score).rolling(persistence_window).mean()
+    persistence_signal = persistence > persistence_thres
+
+    # ==================================================
+    # 6. Liquidity absorption
+    # large volume but little downside progress
+    # ==================================================
+    down_move = np.maximum(open_ - close, 0)
+
+    absorption = np.divide(
+        volume,
+        down_move + 1e-6
+    )
+
+    absorption_mean = pd.Series(absorption).rolling(absorption_window).mean()
+    absorption_std = pd.Series(absorption).rolling(absorption_window).std()
+
+    absorption_z = (absorption - absorption_mean) / absorption_std
+    absorption_signal = absorption_z > absorption_z_thres
+
+    # ==================================================
+    # 7. Relative strength (anti-downtrend behavior)
+    # no benchmark → use own drift stability
+    # ==================================================
+    ret = pd.Series(close).pct_change()
+    rs = ret.rolling(rs_window).mean()
+    rs_signal = rs > rs_thres
+
+    # ==================================================
+    # 8. Institutional score
+    # ==================================================
+    institutional_score = (
+        base_score +
+        persistence_signal.astype(int) +
+        absorption_signal.astype(int) +
+        rs_signal.astype(int)
+    )
+
+    out = {
+        "institutional_score": institutional_score.to_numpy(),
+        "price_efficiency": price_eff_norm.to_numpy(),
+        "clv_mean": clv_mean.to_numpy(),
+        "persistence": persistence.to_numpy(),
+        "absorption_z": absorption_z.to_numpy(),
+        "relative_strength": rs.to_numpy(),
+    }
+
+    return pd.DataFrame(out, index=df.index), out_range
+
+
 
 #============= draft ===========================
 

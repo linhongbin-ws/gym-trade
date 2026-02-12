@@ -391,6 +391,7 @@ def vis_lightweight_chart_df(
     chart: Chart,
     df: pd.DataFrame,
     df_name: str,
+    labels: list[tuple[str, pd.DatetimeIndex]],
     entry_dates: list[pd.DatetimeIndex],
     exit_dates: list[pd.DatetimeIndex],
     mainchart_keys: list[str] = [],
@@ -433,10 +434,13 @@ def vis_lightweight_chart_df(
         lines[k].set(line_df)
 
     # assert False, entry_dates
-    for entry_date in entry_dates:
-        chart.marker(text="B", time=entry_date)
-    for exit_date in exit_dates:
-        chart.marker(text="S", time=exit_date)
+    for label, date in labels:
+        chart.marker(text=label, time=date.to_pydatetime())
+    # for entry_date in entry_dates[:3]:
+    #     chart.marker(text="B", time=entry_date.to_pydatetime()) 
+    # for exit_date in exit_dates[:3]:
+    #     chart.marker(text="S", time=exit_date.to_pydatetime())
+    
 
     chart.show(block=False)
     chart.press_n = False
@@ -486,6 +490,7 @@ def vis_mode(cfg: DictConfig, dfs: dict[str, pd.DataFrame], col_range_dict: dict
         env = PaperTrade(df =df, **env_args)
         obs = env.reset()
         done = False
+        labels = []
         entry_dates = []
         exit_dates = []
         param  = policy.randomize_hyper_param(random_type=cfg.mode.hyper_search)
@@ -495,16 +500,19 @@ def vis_mode(cfg: DictConfig, dfs: dict[str, pd.DataFrame], col_range_dict: dict
             action, action_info = policy(obs)
             obs, reward, done, info = env.step(action)
             if action_info["entry_point"]:
+                labels.append(("B", env.df.index[env._t]))
                 entry_dates.append(env.df.index[env._t])
             if action_info["exit_point"]:
+                labels.append(("S", env.df.index[env._t]))
                 exit_dates.append(env.df.index[env._t])
-
+        
         vis_lightweight_chart_df(
             chart=chart,
             df=df,
             df_name=df_name,
             entry_dates=entry_dates,
             exit_dates=exit_dates,
+            labels=labels,
             mainchart_keys=cfg.gui.mainchart_keys,
             subchart_keys=cfg.gui.subchart_keys,
             mainchart_height=cfg.gui.mainchart_height,
