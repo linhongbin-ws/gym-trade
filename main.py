@@ -5,6 +5,10 @@ import warnings
 import logging
 import contextlib
 
+from numpy.random import f
+
+from gym_trade.policy.trend.trend_breakout import features
+
 warnings.filterwarnings("ignore")
 logging.getLogger("gym").setLevel(logging.CRITICAL)
 
@@ -37,7 +41,7 @@ from gym_trade.tool.ta import make_ta_all_safe, make_ta_all
 from gym_trade.env.embodied import PaperTrade
 from datetime import datetime
 from pathlib import Path
-from gym_trade.policy.registry import POLICY_REGISTRY
+from gym_trade.policy.registry import POLICY_REGISTRY, FUNCTION_REGISTRY
 from tqdm import tqdm
 import yaml
 from queue import Empty as QEmpty
@@ -135,12 +139,22 @@ def make_ta_features(cfg: DictConfig, dfs: dict[str, pd.DataFrame]) -> dict[str,
             del cfg[k]
     OmegaConf.set_struct(cfg, True)
 
-    ta_dict = {k: v for k, v in cfg.ta.items() if k in cfg.policy.ta_select_keys}
-    if cfg.general.future_check:
-        _dfs, col_range_dict = make_ta_all_safe(dfs, ta_dict)
-    else:
-        _dfs, col_range_dict = make_ta_all(dfs, ta_dict)
-    return _dfs, col_range_dict
+    # ta_dict = {k: v for k, v in cfg.ta.items() if k in cfg.policy.ta_select_keys}
+    # if cfg.general.future_check:
+    #     _dfs, col_range_dict = make_ta_all_safe(dfs, ta_dict)
+    # else:
+    #     _dfs, col_range_dict = make_ta_all(dfs, ta_dict)
+    ft_name = cfg.policy.name + "@features"
+    assert ft_name in FUNCTION_REGISTRY, f"Feature {ft_name} not found, select from {FUNCTION_REGISTRY.keys()}"
+    func_call = FUNCTION_REGISTRY[ft_name]
+    _dfs = {}
+    for k, df in dfs.items():
+        _dfs, col_range_dict = func_call(df,)
+        for k in _dfs.columns:
+            df[k] = _dfs[k]
+        
+
+    return dfs, col_range_dict
 
 
 @dataclass
