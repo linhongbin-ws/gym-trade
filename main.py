@@ -128,7 +128,7 @@ def load_data(cfg: DictConfig) -> dict[str, pd.DataFrame]:
 
 
 def make_ta_features(cfg: DictConfig, dfs: dict[str, pd.DataFrame]) -> dict[str, pd.DataFrame]:
-
+    print("making features...")
     # merge cfg ta_xxx to ta
     OmegaConf.set_struct(cfg, False)
     keys = [k for k in cfg.keys()]
@@ -148,7 +148,9 @@ def make_ta_features(cfg: DictConfig, dfs: dict[str, pd.DataFrame]) -> dict[str,
     assert ft_name in FUNCTION_REGISTRY, f"Feature {ft_name} not found, select from {FUNCTION_REGISTRY.keys()}"
     func_call = FUNCTION_REGISTRY[ft_name]
     _dfs = {}
+    pbar = tqdm(total=len(dfs), desc="making features")
     for k, df in dfs.items():
+        pbar.update(1)
         _dfs, col_range_dict = func_call(df,)
         for k in _dfs.columns:
             df[k] = _dfs[k]
