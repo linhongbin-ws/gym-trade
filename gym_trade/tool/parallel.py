@@ -1,139 +1,140 @@
-from queue import Empty
-from typing import List
-from dataclasses import dataclass
-import threading
+from queue import Empty as QEmpty
+import multiprocessing as mp
+from typing import Any, Generator
+from copy import deepcopy as cp
 from tqdm import tqdm
-from abc import ABC, abstractmethod
-from multiprocessing import Process
-# @dataclass
-# class BaseRequest(ABC):
-#     """
-#     Abstract class for implementing Request data type
-#     """
+from abc import abstractmethod
+class Data:
+    def __init__(self, **kwargs):
+        self.data = cp(kwargs)
 
-class Parallel(ABC):
-    """
-    Abstract class to implement manager for managing multiple-thread process
-    """
 
-    def __init__(self, worker_type="thread", worker_num=10):
-        if worker_type == "thread":
-            from queue import Queue, Event
-        else:
-            from multiprocessing import Queue, Event
-        self.request_queue = Queue()
-        self.return_queue = Queue()
-        self.stop_event = Event()
-        self.workers: List = [] # a list of thread objects
-        self.verbose_level = 2 # 0 for no printing
-                               # 1 for some important printing
-                               # 2 for no printing
-        self.worker_type = worker_type
-        assert worker_type in ["thread", "process"]
-        self.worker_num = worker_num
+class MPServer:
+    """recieve a bt request, and return a result"""
+
+    def __init__(
+        self,
+        n_workers: int = 2,
+    ):
+        self._n_workers = n_workers
+        assert self._n_workers > 1, "n_workers must be greater than 1"
+
+        
+        ctx = mp.get_context("spawn")  # 跨平台更稳（Windows/macOS 必须 spawn）
+        self._request_queue = ctx.Queue(maxsize=self.n_workers * 4)
+        self._result_queue = ctx.Queue()
+        self._stop_event = ctx.Event()
+
+        self.procs = [
+            ctx.Process(
+                target=bt_server_loop,
+                args=(
+                    policy_name,
+                    policy_args,
+                    env_args,
+                    self._stop_event,
+                    self._request_queue,
+                    self._result_queue,
+                ),
+            )
+            for _ in range(self.n_workers)
+        ]
+        for p in self.procs:
+            # p.daemon = True
+            p.start()
+
+        self._closed = False
+
+    @property
+    def n_workers(self):
+        return self._n_workers
+
+    def shutdown(self, join_timeout: float = 5.0):
+
+        if self._n_workers > 1:
+            self._stop_event.set()
+
+            # wait for graceful exit
+            for p in self.procs:
+                p.join(join_timeout)
+
+            # force kill remaining
+            for p in self.procs:
+                if p.is_alive():
+                    p.terminate()
+                    p.join()
+
+            # NOW it's safe to close queues
+            self._request_queue.close()
+            self._result_queue.close()
+            self._request_queue.join_thread()
+            self._result_queue.join_thread()
+
+    # 让 with BTServer(...) 自动清理
+    def __enter__(self):
+        return self
+
+    def __exit__(self, exc_type, exc, tb):
+        self.shutdown()
+        return False
+    
+    def get_input_generator(self, inputs: dict[str, dict[str, Any]]) -> Generator[dict[str, Any], None, None]:
+        def generator():
+            for k, v in inputs.items():
+                yield k,v, False
+            while True:
+                yield None, None, True
+        return generator
 
     @abstractmethod
-    def parallel_func(self, input)->None:
-        """ the function that a thread need to work on given a request
-
-        input:
-            :param request: a request object
-        """
-        pass
-
-    def _worker(self):
-        """ a thread function running in the loop
-        """
-
-        while not self.stop_event.is_set():
-            try:
-                request = self.request_queue.get(block=False)
-                return_msg = self.parallel_func(request)
-                self.return_queue.put(return_msg)
-
-            except Empty:
-                continue
-
-            except Exception as e:
-                if self.verbose_level>1:
-                    print(e)
-            # try:
-            #     is_break = self.close_queue.get(block=False)
-            #     if is_break:
-            #         break
-            #     break
-            # except Empty:
-            #     continue
-
-            # except Exception as e:
-            #     if self.verbose_level>1:
-            #         print(e)
-
-
-    def run(self, input_list):
-        """ main run function for manager, we will show a basic workflow example
-        """
-        print("Initialize {} workers..".format( self.worker_num))
-
-        # intialize process
-
-        for index in range( self.worker_num):
-            if self.worker_type == "thread":
-                thread = threading.Thread(target=self._worker)
-                self.workers.append(thread)
-                thread.start()
-            elif self.worker_type == "process":
-                p = Process(target=self._worker)
-                self.workers.append(p)
-                p.start()
-
-
-        for input in input_list:
-            self.request_queue.put(input)
-
-        # wait until the workers process all the request
-        self.wait_for_workers()
-        return_list = []
-        print("get return list")
-        for _ in range(len(input_list)):
-            return_list.append(self.return_queue.get())
-        return return_list
+    @staticmethod
+    def worker_func(self,request: Data) -> Data:
+        return request
     
-    def wait_for_workers(self):
-        """
-        A function that waits until the workers process all the request. A progress bar will show
-        """
-        total = self.request_queue.qsize()
-        pbar = tqdm(total=total)
-        count = 0
+    @staticmethod
+    def _worker_loop(
+     self,stop_event, request_queue, result_queue
+    ):
+        while not stop_event.is_set():
+            request = None
+            try:
+                request = request_queue.get(timeout=0.5)  # 定期醒来检查 stop_event
+            except QEmpty:
+                continue
+            if request is not None:
+                result = self.worker_func(request)
+                result_queue.put(result)
 
-        while not self.request_queue.empty():
-            if count != total - self.request_queue.qsize():
-                delta = total - self.request_queue.qsize() - count
-                count = total - self.request_queue.qsize()
-                pbar.update(delta) # display the progress bar
+    def run(self, inputs: dict[str, Data]) -> dict[str, Data]:
+        
+        in_gen = self.get_input_generator(inputs)
+        pbar = tqdm(total=len(inputs), desc="Running")
+        result_dict = {}
+        stop_gen = False
+        while(
+                not self._stop_event.is_set() 
+                and pbar.n < len(inputs)
+            ):
+            if not self._request_queue.full() and not stop_gen:
+                key, value, stop_gen = next(in_gen)
+                input_data = Data(key=key, value=value)
+                self._request_queue.put(input_data)
+                
+            if not self._result_queue.empty():
+                try:
+                    result_data = self._result_queue.get(
+                        timeout=0.01
+                    )  # 定期醒来检查 stop_event
+          
+                    result_dict[result_data.data['key']] = result_data.data['value']
+                    pbar.update(1)
+                except QEmpty:
+                    pass
 
-            if self.request_queue.empty():
-                break
-        pbar.close()
-
-        print("thread finish")
-
-
-    def close(self):
-        """close the manager including thread process
-        """
-
-
-        # break the thread function loop
-        self.stop_event.set()
-
-        print("wait worker join...")
-        # wait for workers exit
-        for w in self.workers:
-            w.join()
-
-        # destroy all thread objects
-        for w in self.workers:
-            del(w)
-        print("close data manager")
+    
+if __name__ == "__main__":
+    server = MPServer(n_workers=2)
+    out = server.run(inputs={
+        "input1": Data(value=1),
+        "input2": Data(value=2),
+    })
