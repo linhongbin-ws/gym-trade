@@ -6,3 +6,5 @@ log/
 .vscode/
 outputs/
 **DS_Store
+data/
+.cache/

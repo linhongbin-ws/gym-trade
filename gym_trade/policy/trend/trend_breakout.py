@@ -53,7 +53,7 @@ class Policy(BasePolicy):
         vol_z = float(obs[self._ta_prefix  + "vol_z"])
         close_pos = float(obs[self._ta_prefix  + "close_pos_in_range"])
         squeeze_pct = float(obs[self._ta_prefix  + "squeeze_pct"])
-        close = float(obs.get("dash@close", np.nan))  # 如果你的框架没有 dash@close，就删掉并用别的 close 字段
+        close = float(obs.get("close", np.nan))
 
         # counters
         if pos > 0:
@@ -141,7 +141,7 @@ class Policy(BasePolicy):
             self._ta_prefix  + "squeeze_pct",
         ]
         # 如果你框架里能提供 close，建议加上用于 trailing stop
-        keys += ["dash@pos"] 
+        keys += ["dash@pos", "close"]
         return keys
 
 

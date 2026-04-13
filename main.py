@@ -5,10 +5,6 @@ import warnings
 import logging
 import contextlib
 
-from numpy.random import f
-
-from gym_trade.policy.trend.trend_breakout import features
-
 warnings.filterwarnings("ignore")
 logging.getLogger("gym").setLevel(logging.CRITICAL)
 
@@ -37,16 +33,91 @@ import pandas as pd
 from omegaconf import DictConfig, OmegaConf
 import hydra
 import random
-from gym_trade.tool.ta import make_ta_all_safe, make_ta_all
 from gym_trade.env.embodied import PaperTrade
-from datetime import datetime
+from datetime import datetime, timedelta
 from pathlib import Path
+import gym_trade.policy  # triggers auto-discovery via __init__.py
 from gym_trade.policy.registry import POLICY_REGISTRY, FUNCTION_REGISTRY
+from gym_trade.tool.screener import get_symbols_from_minute_dir, screen_gap, screen_universe, screen_universe_from_minute
 from tqdm import tqdm
 import yaml
 from queue import Empty as QEmpty
 import multiprocessing as mp
 from typing import Any
+
+
+def _ensure_daily_cache(
+    symbols: list[str],
+    target_date: str,
+    proxy: str | None,
+    cache_dir: str,
+    market: str = "us-stock",
+    interval: str = "1d",
+    data_api: str = "yfinance",
+    cache_only: bool = False,
+    lookback_years: int = 1,
+) -> dict[str, pd.DataFrame]:
+    """
+    Ensure daily data cache covers [target_date - lookback_years, target_date] for every symbol.
+
+    - Cache exists AND covers the needed window → load as-is, no download.
+    - Cache missing or doesn't cover → delete stale file and re-download.
+    Download range: [need_start, target_date].
+    """
+    cache_csv_dir = Path(cache_dir) / f"{market}_{interval}_{data_api}"
+    cache_csv_dir.mkdir(parents=True, exist_ok=True)
+
+    need_start = pd.Timestamp(target_date) - pd.DateOffset(years=lookback_years)
+    need_end   = pd.Timestamp(target_date)
+    dl_start   = need_start.strftime('%Y-%m-%d')
+    dl_end     = (need_end + pd.DateOffset(days=1)).strftime('%Y-%m-%d')  # yfinance end is exclusive
+
+    def _find_cache(s: str) -> Path | None:
+        hits = list(cache_csv_dir.glob(f"{s}_????-??-??_????-??-??.csv"))
+        return hits[0] if hits else None
+
+    def _cache_covers(path: Path) -> bool:
+        """Parse dates from filename SYMBOL_start_end.csv and check coverage.
+        Allow 7-day tolerance on start (markets may not trade on exact need_start).
+        """
+        try:
+            parts = path.stem.rsplit('_', 2)   # ['SYMBOL', 'YYYY-MM-DD', 'YYYY-MM-DD']
+            first = pd.Timestamp(parts[1])
+            last  = pd.Timestamp(parts[2])
+            return first <= need_start + pd.DateOffset(days=7) and last >= need_end - pd.DateOffset(days=7)
+        except Exception:
+            return False
+
+    stale: list[str] = []
+    for s in symbols:
+        cf = _find_cache(s)
+        if cf is None or not _cache_covers(cf):
+            stale.append(s)
+
+    cached = len(symbols) - len(stale)
+    print(f"[screen_bt] cache hit: {cached} / {len(symbols)}  |  need download: {len(stale)} "
+          f"(range: {dl_start} ~ {dl_end})")
+
+    if stale and not cache_only:
+        for s in stale:
+            cf = _find_cache(s)
+            if cf is not None:
+                cf.unlink(missing_ok=True)
+    elif stale and cache_only:
+        print(f"[screen_bt] cache_only=true, skipping {len(stale)} missing/stale symbols")
+
+    return load_data_func(
+        data_api=data_api,
+        proxy=proxy,
+        interval=interval,
+        start=dl_start,
+        end=dl_end,
+        symbols=symbols,
+        cache_dir=cache_dir,
+        market=market,
+        cache_only=cache_only,
+    )
+
 
 def gen_stat(key,values):
     stat = {}
@@ -113,6 +184,11 @@ def to_python(obj):
         return obj
 
 
+def _resolve_cache_dir(cfg: DictConfig) -> str:
+    orig_cwd = hydra.utils.get_original_cwd()
+    return str(Path(orig_cwd) / cfg.data.get('cache_dir', '.cache'))
+
+
 def load_data(cfg: DictConfig) -> dict[str, pd.DataFrame]:
     dfs = load_data_func(
         data_api=cfg.data.name,
@@ -121,41 +197,28 @@ def load_data(cfg: DictConfig) -> dict[str, pd.DataFrame]:
         start=cfg.data.start,
         end=cfg.data.end,
         symbols=cfg.data.symbol,
-        cache_dir=cfg.data.cache_dir,
-        force_download=cfg.data.force_download,
+        cache_dir=_resolve_cache_dir(cfg),
+        market=cfg.data.get('market', 'us-stock'),
+        force_download=cfg.data.get('force_download', False),
+        cache_only=cfg.data.get('cache_only', False),
+        local_data_dir=cfg.data.get('local_dir', None),
     )
     return dfs
 
 
 def make_ta_features(cfg: DictConfig, dfs: dict[str, pd.DataFrame]) -> dict[str, pd.DataFrame]:
     print("making features...")
-    # merge cfg ta_xxx to ta
-    OmegaConf.set_struct(cfg, False)
-    keys = [k for k in cfg.keys()]
-    cfg.ta = {}
-    for k in keys:
-        if k.startswith("ta_"):
-            cfg.ta.update(cfg[k])
-            del cfg[k]
-    OmegaConf.set_struct(cfg, True)
-
-    # ta_dict = {k: v for k, v in cfg.ta.items() if k in cfg.policy.ta_select_keys}
-    # if cfg.general.future_check:
-    #     _dfs, col_range_dict = make_ta_all_safe(dfs, ta_dict)
-    # else:
-    #     _dfs, col_range_dict = make_ta_all(dfs, ta_dict)
     ft_name = cfg.policy.name + "@features"
     assert ft_name in FUNCTION_REGISTRY, f"Feature {ft_name} not found, select from {FUNCTION_REGISTRY.keys()}"
     func_call = FUNCTION_REGISTRY[ft_name]
-    _dfs = {}
+    feature_params = OmegaConf.to_container(cfg.get("features", {}), resolve=True)
+    col_range_dict = {}
     pbar = tqdm(total=len(dfs), desc="making features")
-    for k, df in dfs.items():
+    for sym, df in dfs.items():
         pbar.update(1)
-        _dfs, col_range_dict = func_call(df,)
-        for k in _dfs.columns:
-            df[k] = _dfs[k]
-        
-
+        feat_df, col_range_dict = func_call(df, **feature_params)
+        for col in feat_df.columns:
+            df[col] = feat_df[col]
     return dfs, col_range_dict
 
 
@@ -490,6 +553,91 @@ def bt_mode(cfg: DictConfig, dfs: dict[str, pd.DataFrame], col_range_dict: dict)
     server.shutdown()
 
 
+def screen_bt_mode(cfg: DictConfig) -> None:
+    target_date = cfg.mode.target_date
+    top_n = cfg.mode.get("top_n", 10)
+    orig_cwd = hydra.utils.get_original_cwd()
+    local_dir = str(Path(orig_cwd) / cfg.data.local_dir)
+
+    min_price = cfg.mode.get("min_price", 5.0)
+    min_adv   = cfg.mode.get("min_adv", 10_000_000)
+
+    # 1. Get all symbols from minute data folder
+    all_symbols = get_symbols_from_minute_dir(local_dir, target_date)
+    print(f"[screen_bt] {len(all_symbols)} symbols found in minute data folder")
+
+    # 2. Download daily data for all symbols (use cache if available)
+    cache_dir = _resolve_cache_dir(cfg)
+    cache_only = cfg.data.get("cache_only", False)
+    daily_dfs = _ensure_daily_cache(
+        symbols=all_symbols,
+        target_date=target_date,
+        proxy=cfg.general.proxy,
+        cache_dir=cache_dir,
+        market=cfg.data.get('market', 'us-stock'),
+        interval="1d",
+        data_api="yfinance",
+        cache_only=cache_only,
+    )
+    print(f"[screen_bt] daily data loaded for {len(daily_dfs)} / {len(all_symbols)} symbols")
+
+    # 3. Universe filter (20-day ADV window) using daily history
+    universe  = screen_universe(daily_dfs, target_date, min_price=min_price, min_avg_dollar_volume=min_adv)
+    daily_dfs = {s: daily_dfs[s] for s in universe if s in daily_dfs}
+    print(f"[screen_bt] {len(daily_dfs)} symbols pass universe filter (price>${min_price}, adv>${min_adv/1e6:.0f}M)")
+
+    # 4. Screen top-N gap-up symbols
+    gap_results = screen_gap(daily_dfs, target_date, top_n=top_n, direction="up")
+    print(f"\n[screen_bt] Top-{top_n} gap-up on {target_date}:")
+    for r in gap_results:
+        print(f"  {r['symbol']:10s}  gap={r['gap']*100:+.2f}%  open={r['open_today']:.2f}  prev_close={r['close_prev']:.2f}")
+
+    if not gap_results:
+        print("[screen_bt] No qualifying symbols found.")
+        return
+
+    top_symbols = [r["symbol"] for r in gap_results]
+
+    # 5. Load minute data for top symbols on target_date only
+    next_day = (pd.Timestamp(target_date) + timedelta(days=1)).strftime("%Y-%m-%d")
+    minute_dfs = load_data_func(
+        data_api="local",
+        interval="1m",
+        symbols=top_symbols,
+        local_data_dir=local_dir,
+        start=target_date,
+        end=next_day,
+    )
+    print(f"\n[screen_bt] Minute data loaded for {len(minute_dfs)} symbols")
+
+    # 6. Run BNH on each symbol
+    policy_cls = POLICY_REGISTRY["bnh"]
+    policy = policy_cls()
+    env_args = OmegaConf.to_container(cfg.env, resolve=True)
+    env_args = {k: v for k, v in env_args.items() if k not in ["name", "start", "end"]}
+    env_args["obs_keys"] = policy.obs_keys
+    env_args["interval"] = "1m"
+
+    # BNH features func
+    ft_name = "bnh@features"
+    feat_func = FUNCTION_REGISTRY[ft_name]
+    col_range_dict = {}
+
+    print(f"\n[screen_bt] BNH backtest results:")
+    for symbol, df in minute_dfs.items():
+        df = df.dropna(subset=["open", "close", "high", "low"]).copy()
+        if len(df) == 0:
+            print(f"  {symbol:10s}  SKIP (all NaN)")
+            continue
+        feat_df, col_range_dict = feat_func(df)
+        for col in feat_df.columns:
+            df[col] = feat_df[col]
+        env = PaperTrade(df=df, **{**env_args, "col_range_dict": col_range_dict.copy()})
+        request = BTRequest(policy_hyper_param={}, df=df, param_id=0, df_name=symbol)
+        result = bt_rollout(request, policy, env)
+        print(f"  {symbol:10s}  pnl={result.pnl*100:+.2f}%  bars={result.total_t}  pos_chg={result.pos_chg}")
+
+
 def vis_mode(cfg: DictConfig, dfs: dict[str, pd.DataFrame], col_range_dict: dict) -> None:
     
     chart = Chart(toolbox=True, inner_width=1, inner_height=cfg.gui.mainchart_height)
@@ -538,14 +686,19 @@ def vis_mode(cfg: DictConfig, dfs: dict[str, pd.DataFrame], col_range_dict: dict
 @hydra.main(config_path="./config", config_name="config.yaml")
 def main(cfg: DictConfig) -> None:
 
+    if cfg.mode.name == "screen_bt":
+        screen_bt_mode(cfg)
+        return None
+
     dfs = load_data(cfg)
     dfs, col_range_dict = make_ta_features(cfg, dfs)
+
     if cfg.mode.name == "vis":
         vis_mode(cfg, dfs, col_range_dict)
     elif cfg.mode.name == "bt":
         bt_mode(cfg, dfs, col_range_dict)
     else:
-        raise NotImplementedError(f"Unsupported mode: {cfg.mode.mode}")
+        raise NotImplementedError(f"Unsupported mode: {cfg.mode.name}")
     return None
 
 

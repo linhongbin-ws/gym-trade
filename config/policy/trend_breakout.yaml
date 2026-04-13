@@ -1,8 +1,0 @@
-name: trend_breakout
-
-
-mainchart_keys:
-  - null
-
-subchart_keys:
-  - dash@pos

@@ -1,19 +1,71 @@
-defaults:
-  - mode: vis
-  - ta@ta_ma: ma
-  - ta@ta_ema: ema
-  - ta@ta_rlf: rlf
-  - ta@ta_rsi: rsi
-  - ta@ta_acc: acc
-  - data: yf
-  - policy: dummy
-  - env: paper_trade 
-  - gui: lightweight_charts 
-
 general:
   proxy: http://127.0.0.1:7897
-  use_cache: false
-  cache_dir: /tmp/gym_trade
-  no_vis: false
-  future_check: true # if false will make ta faster
+  future_check: true
 
+data:
+  name: local
+  interval: 1m
+  local_dir: ./data
+  cache_dir: .cache
+  market: us-stock
+  symbol: null   # null = load all symbols in directory
+  start: null
+  end: null
+  cache_only: false  # true = load only from cache, skip any network download
+
+env:
+  init_balance: 1e6
+  commission_type: free
+  reward_type: sparse
+  dash_keys: [pos, cash, balance, pnl]
+  action_deadzone: 0.01
+  action_on: open_t
+  eod_close: true    # force close position at end of each trading session (1m only)
+
+mode:
+  name: screen_bt
+  target_date: "2022-02-18"
+  top_n: 10
+  min_price: 5.0          # universe filter: close price > $5
+  min_adv: 10_000_000     # universe filter: avg daily dollar volume > $10M
+  hyper_search: uniform
+  search_num: 10
+  save_result_dir: .
+  workers: 10
+
+policy:
+  name: vwap_revert
+
+features:
+  z_window: 20
+  vol_window: 20
+  ret5_window: 5
+
+gui:
+  mainchart_keys: []
+  subchart_keys: [dash@pos]
+  mainchart_height: 0.6
+
+ta:
+  ma5:   {func: ma, key: close, window: 5}
+  ma10:  {func: ma, key: close, window: 10}
+  ma20:  {func: ma, key: close, window: 20}
+  ma60:  {func: ma, key: close, window: 60}
+  ma120: {func: ma, key: close, window: 120}
+  ma240: {func: ma, key: close, window: 240}
+  ema5:  {func: ema, key: close, window: 5}
+  ema10: {func: ema, key: close, window: 10}
+  ema20: {func: ema, key: close, window: 20}
+  rlf_ma240_60: {func: rolling_linreg_features, key: ma240@value, window: 60}
+  rlf_ma240_80: {func: rolling_linreg_features, key: ma240@value, window: 80}
+  rsi_standard:
+    func: rsi_momentum_features
+    key: close
+    rsi_window: 14
+    mom_periods: [1, 5, 15]
+    ema_fast: 12
+    ema_slow: 48
+    eps: 1e-12
+  acc:   {func: accumulation_features,    vol_window: 20, atr_window: 14, range_window: 20}
+  acc_v2: {func: accumulation_features_v2}
+  acc_v3: {func: accumulation_features_v3}
