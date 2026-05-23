@@ -221,6 +221,9 @@ def load_data(
             if not day_dfs:
                 continue
             df = pd.concat(day_dfs).sort_index()
+            # Normalize index to tz-naive UTC so per-day tz inconsistencies after concat
+            # (mixed tz-aware / tz-naive Timestamps demote DatetimeIndex → Index) don't break .tz access.
+            df.index = pd.to_datetime(df.index, utc=True).tz_convert(None)
             if start is not None:
                 df = df[df.index >= pd.Timestamp(start, tz=df.index.tz)]
             if end is not None:
